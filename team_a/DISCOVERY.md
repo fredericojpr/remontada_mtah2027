@@ -9,6 +9,8 @@
 | **Literature figures** | Figures marked **†** come from the literature via the Research Lead's memo. Their source locations and verification status are in §18.4. The Research Lead re-verified most of them against the source text; the exceptions are flagged ⚠ there. Two decision-critical sources still get an independent spot-check (A1). |
 | **Deadline** | **Tuesday 17 November 2026**, 27 days from today |
 
+
+> **⚠ Superseded in part (27 Oct 2026).** The organisers' rule update (upstream `f8f2629`) bans hand labels on the provided game for any purpose, including validation, and forbids tuning on the public 5 minutes. The **silver set** (§11.4) and every "calibrate on public + silver" step in this document are therefore **void**. Calibration now uses Metrica's public sample games (other games, allowed). See the execution plan.
 ---
 
 ## Contents
