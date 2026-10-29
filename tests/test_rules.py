@@ -1,5 +1,6 @@
 """One test per possession rule, on small hand-built scenes (metres, 25 fps)."""
 
+import dataclasses
 import os
 import sys
 
@@ -81,14 +82,14 @@ def test_rule5_switch_after_a_ball_gap_is_backdated_to_mid_gap():
 
 
 def test_rule6_ball_beyond_a_line_stops_play():
-    n = 300
+    n = 600
     ball = np.column_stack([np.full(n, 50.0), np.full(n, 30.0)])
-    ball[100:150] = [50.0, 68.8]
-    ball[150:] = np.column_stack([np.linspace(50, 80, n - 150), np.full(n - 150, 30.0)])
+    ball[300:350] = [50.0, 68.8]
+    ball[350:] = np.column_stack([50 + 0.2 * np.arange(n - 350), np.full(n - 350, 30.0)])
     ball = with_kickoff(ball)
     speed = evidence.ball_speed(ball)
     stops = dead_ball.stoppages(ball, speed, np.full(n, 3.0), PITCH, 0, n - 1, P)
-    assert stops[-1] == (100, 150)
+    assert stops[-1] == (300, 350)
 
 
 def test_rule7_collective_halt_stops_play_only_after_three_seconds():
@@ -105,23 +106,23 @@ def test_rule7_collective_halt_stops_play_only_after_three_seconds():
 
 
 def test_rule8_restart_is_the_first_kick_after_a_stoppage():
-    n = 500
+    n = 700
     ball = np.tile([50.0, 30.0], (n, 1))
-    ball[200:] = np.column_stack([np.linspace(50, 90, n - 200), np.full(n - 200, 30.0)])
+    ball[400:] = np.column_stack([np.linspace(50, 90, n - 400), np.full(n - 400, 30.0)])
     ball = with_kickoff(ball)
     median = np.full(n, 3.0)
-    median[100:180] = 0.8
+    median[300:380] = 0.8
     stops = dead_ball.stoppages(ball, evidence.ball_speed(ball), median, PITCH, 0, n - 1, P)
-    assert stops[-1] == (100, 201)
+    assert stops[-1] == (300, 401)
 
 
 def test_rule8_short_stoppages_are_dropped():
-    n = 400
+    n = 700
     ball = with_kickoff(np.tile([50.0, 30.0], (n, 1)))
-    ball[200:210] = [50.0, 68.8]
-    ball[210:] = np.column_stack([50 + 0.2 * np.arange(n - 210), np.full(n - 210, 30.0)])
+    ball[400:410] = [50.0, 68.8]
+    ball[410:] = np.column_stack([50 + 0.2 * np.arange(n - 410), np.full(n - 410, 30.0)])
     stops = dead_ball.stoppages(ball, evidence.ball_speed(ball), np.full(n, 3.0), PITCH, 0, n - 1, P)
-    assert not any(begin == 200 for begin, _ in stops)
+    assert stops[0][1] < 20 and not any(begin == 400 for begin, _ in stops)
 
 
 def test_rule9_restart_team_is_the_taker():
@@ -144,57 +145,24 @@ def test_rule10_half_starts_dead_until_kickoff_and_only_halves_are_graded():
     assert text.index("H") in (151, 152)
 
 
-def teams_scene(n, ball, home_x, away_x):
-    """Seven players per team standing at the given x positions (per frame), spread across y."""
-    y = np.linspace(10.0, 58.0, 7)
-    home = np.stack([np.column_stack([home_x, np.full(n, yy)]) for yy in y], axis=1)
-    away = np.stack([np.column_stack([away_x, np.full(n, yy)]) for yy in y], axis=1)
-    home[:, 3] = [52.0, 34.0]
-    slots = np.concatenate([home, away], axis=1)
-    team = np.tile(np.array([0] * 7 + [1] * 7, dtype=np.int8), (n, 1))
-    return epts.Tracking(np.arange(1, n + 1), ball, slots, np.full((n, 14), 3.0), team, PITCH)
-
-
-def test_rule10_only_a_kick_from_the_kickoff_formation_starts_the_half():
-    n = 400
-    ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
-    ball[100:120] = np.column_stack([np.linspace(52.5, 62.5, 20), np.full(20, 34.0)])
-    ball[120:200] = [52.5, 34.0]
-    ball[200:] = np.column_stack([52.5 - 0.2 * np.arange(n - 200), np.full(n - 200, 34.0)])
-    t = np.arange(n)
-    home_x = np.where(t < 150, 60.0, np.where(t < 230, 30.0, 60.0))
-    tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
+def test_rule10_taps_followed_by_standing_still_do_not_open_the_half():
+    n = 1500
+    ball = np.tile([52.5, 34.0], (n, 1))
+    ball[100:120] = np.column_stack([np.linspace(52.5, 47.5, 20), np.full(20, 34.0)])
+    ball[120:900] = [47.5, 34.0]
+    ball[900:] = np.column_stack([47.5 + 0.2 * np.arange(n - 900), np.full(n - 900, 34.0)])
+    median = np.full(n, 0.5)
+    median[900:] = 3.0
     report = []
-    text = string(possession.label_match(tracking, [(90, 349)], n, report=report))
-    assert set(text[90:201]) == {"D"}
-    assert text.index("H") in (201, 202)
-    assert report == ["kick as formation broke"]
+    stops = dead_ball.stoppages(ball, evidence.ball_speed(ball), median, PITCH, 0, n - 1, P,
+                                report)
+    assert stops[0][0] == 0 and stops[0][1] in (900, 901, 902)
+    assert report == ["first kick followed by play"]
 
 
-def test_rule10_kickoff_on_the_first_graded_frame_with_formation_from_before_grading():
-    n = 600
-    t = np.arange(n)
-    ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
-    ball[300:] = np.column_stack([52.5 - 0.2 * np.arange(n - 300), np.full(n - 300, 34.0)])
-    home_x = np.where(t < 350, 30.0, 60.0)
-    tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
-    report = []
-    text = string(possession.label_match(tracking, [(300, 599)], n, report=report))
-    assert text.index("H") in (300, 301, 302)
-    assert report == ["kick as formation broke"]
-
-
-def test_rule10_early_tap_with_the_ball_unseen_at_the_real_kickoff():
-    n = 1600
-    t = np.arange(n)
-    ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
-    ball[200:220] = np.column_stack([np.linspace(52.5, 50.0, 20), np.full(20, 34.0)])
-    ball[220:1100] = [52.5, 34.0]
-    ball[1100:1180] = np.nan
-    ball[1180:] = np.column_stack([40.0 - 0.2 * np.arange(n - 1180), np.full(n - 1180, 34.0)])
-    home_x = np.where(t < 100, 60.0, np.where(t < 1110, 30.0, 60.0))
-    tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
-    report = []
-    text = string(possession.label_match(tracking, [(50, 1599)], n, report=report))
-    assert report == ["formation broke"]
-    assert set(text[50:1110]) == {"D"}
+def test_rule10_opening_is_the_first_kick_followed_by_play_and_zero_window_is_first_kick():
+    kicks = np.array([100, 900])
+    assert dead_ball.opening_restart(kicks, [130], 2000, P) == (900, "first kick followed by play")
+    zero = dataclasses.replace(P, opening_play_frames=0)
+    assert dead_ball.opening_restart(kicks, [130], 2000, zero)[0] == 100
+    assert dead_ball.opening_restart(kicks, [130, 950], 2000, P) == (100, "first kick")

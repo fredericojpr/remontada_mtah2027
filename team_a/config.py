@@ -42,14 +42,8 @@ class Params:
     min_play_frames: int = 50
     resume_frames: int = 25
 
-    # Rule 10: at a kickoff every player is in his own half (Law 8); allow one or two tracking
-    # errors per team, and require most of each team to be seen.
-    kickoff_own_half_share: float = 0.9
-    kickoff_min_players: int = 7
-    # Teams line up for seconds, not instants; after the kick, attackers cross halfway within
-    # seconds, so the kickoff is the last kick shortly before the formation breaks.
-    kickoff_formation_min_frames: int = 50
-    kickoff_break_frames: int = 125
+    # Rule 10: a half has started when play runs on for 10 s after a kick.
+    opening_play_frames: int = 250
 
     # Rule 9: the taker stands over the ball in the last second before the restart.
     taker_window_frames: int = 25
