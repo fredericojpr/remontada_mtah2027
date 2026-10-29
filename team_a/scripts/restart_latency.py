@@ -12,9 +12,14 @@ restart. "Ball gap" means the ball, in the tracking being labelled, is missing s
 kick window after the restart. Run on the clean sample and on the degraded one
 (team_a/degrade.py).
 
-    python team_a/scripts/restart_latency.py
+It compares rule 8 with and without gap-backdated restarts. The sample's ball is blank whenever
+play is dead, so the third proxy fills it in first (degrade.fill_dead_ball): only that one can
+show whether backdating helps, because on the other two nearly every restart follows a gap.
+
+    python team_a/scripts/restart_latency.py [--by-type]
 """
 
+import dataclasses
 import os
 import sys
 
@@ -80,7 +85,25 @@ def summary(name, values):
                 100 * np.mean(found < -LATE)))
 
 
+def report(name, gt, pred, events, travel, gap, by_type):
+    lat = {f: latency(pred, gt, f) for f, _, _ in events}
+    r = pm.evaluate(gt, pred, bootstrap_n=1000)
+    print("  {}: spellF1 {:.3f} [{:.3f}-{:.3f}]  macroF1 {:.3f}  poss {} (truth {})".format(
+        name, r["spell_f1_mean"], r["spell_bootstrap_low"], r["spell_bootstrap_high"],
+        r["macro_f1"], r["n_pred_spells"], r["n_gt_spells"]))
+    print(summary("all", list(lat.values())))
+    if by_type:
+        for kind in sorted({k for _, k, _ in events}):
+            print(summary(kind, [lat[f] for f, k, _ in events if k == kind]))
+        print(summary("period openers", [lat[f] for f, _, o in events if o]))
+    print(summary("tap (< kick distance)",
+                  [lat[f] for f in travel if travel[f] < DEFAULT.kick_distance_m]))
+    print(summary("ball gap in kick window", [lat[f] for f in gap if gap[f]]))
+    print(summary("ball seen in kick window", [lat[f] for f in gap if not gap[f]]))
+
+
 if __name__ == '__main__':
+    by_type = "--by-type" in sys.argv
     tracking = sg.load_tracking()
     n = len(tracking.frame_id)
     gt = sg.load_labels(n)
@@ -95,18 +118,17 @@ if __name__ == '__main__':
               len(events), DEFAULT.kick_window_frames / FPS, DEFAULT.kick_distance_m, len(taps),
               DEFAULT.kick_distance_m, len(events) - len(taps) - len(unknown), len(unknown)))
 
-    for name, data in [("clean", tracking), ("degraded", degrade.degrade(tracking))]:
-        pred = possession.label_match(data, halves, n)
-        lat = {f: latency(pred, gt, f) for f, _, _ in events}
-        print("\n{} sample: our restart minus the true restart".format(name))
-        print(summary("all", list(lat.values())))
-        for kind in sorted({k for _, k, _ in events}):
-            print(summary(kind, [lat[f] for f, k, _ in events if k == kind]))
-        print(summary("period openers", [lat[f] for f, _, o in events if o]))
-        print(summary("tap (< kick distance)", [lat[f] for f in taps]))
-        print(summary("kick (>= kick distance)",
-                      [lat[f] for f in travel if travel[f] >= DEFAULT.kick_distance_m]))
+    proxies = [("clean", tracking), ("degraded", degrade.degrade(tracking)),
+               ("degraded, dead ball filled",
+                degrade.degrade(degrade.fill_dead_ball(tracking, gt)))]
+    variants = [("restarts as before", dataclasses.replace(DEFAULT, restart_backdate_max_frames=0)),
+                ("gap-backdated restarts", DEFAULT)]
+    for name, data in proxies:
         gap = {f: np.isnan(data.ball_xy[f:f + 1 + DEFAULT.kick_window_frames, 0]).any()
                for f, _, _ in events}
-        print(summary("ball gap in kick window", [lat[f] for f in gap if gap[f]]))
-        print(summary("ball seen in kick window", [lat[f] for f in gap if not gap[f]]))
+        dead = gt == pm.D
+        print("\n{} sample (ball seen on {:.0f}% of dead frames): our restart minus the true "
+              "restart".format(name, 100 * np.mean(~np.isnan(data.ball_xy[dead, 0]))))
+        for label, params in variants:
+            report(label, gt, possession.label_match(data, halves, n, params=params), events,
+                   travel, gap, by_type)

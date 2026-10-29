@@ -48,6 +48,19 @@ def kick_frames(travelling, speed, params):
     return out
 
 
+def backdated(kick, travel_start, missing, begin, params):
+    """Rule 8: a kick whose travel is first seen straight after a ball gap was struck inside the
+    gap. Dated mid-gap, at most the backdate limit earlier, never before the stoppage began
+    (rule 5 does the same for gains)."""
+    if travel_start == 0 or not missing[travel_start - 1]:
+        return kick
+    gap_start = travel_start - 1
+    while gap_start > 0 and missing[gap_start - 1]:
+        gap_start -= 1
+    shift = min((travel_start - gap_start) // 2, params.restart_backdate_max_frames)
+    return max(begin, travel_start - shift) if shift else kick
+
+
 def run_starts(mask, min_frames):
     return [start for start, stop in runs(mask) if stop - start >= min_frames]
 
@@ -112,6 +125,7 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None
         beyond_lines(b, pitch, params.out_margin_m), params.out_frames)]
         + [(f, "halt") for f in run_starts(slow & still_ball, params.halt_frames)])
     kicks = np.array(kick_frames(kicked, s, params), dtype=np.int64)
+    travel_start = dict(zip(kicks.tolist(), [a for a, _ in runs(kicked)]))
     resumes = np.array(run_starts(missing & moving, params.resume_frames), dtype=np.int64)
     candidates, prefix = kicks, ""
     if kickoff_tag is not None:
@@ -125,9 +139,11 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None
         if begin < t:
             continue
         if kind == "kickoff":
-            restart = opening
+            restart = (backdated(opening, travel_start[opening], missing, 0, params)
+                       if opening in travel_start else opening)
         else:
-            options = [kicks[kicks >= begin][:1]]
+            options = [np.array([backdated(int(k), travel_start[int(k)], missing, begin, params)
+                                 for k in kicks[kicks >= begin][:1]], dtype=np.int64)]
             if kind == "halt":
                 options.append(resumes[resumes >= begin][:1])
             options = np.concatenate(options)

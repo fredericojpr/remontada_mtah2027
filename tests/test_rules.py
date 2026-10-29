@@ -241,3 +241,35 @@ def test_rule10_report_names_a_halt_merged_into_the_opening():
                                 zero, report, 590)
     assert report[0]["opening_kick"] in (600, 601, 602)
     assert report[0]["stoppages"][0][2] == "kickoff+halt" and stops[0][1] in (800, 801, 802)
+
+
+def test_rule8_a_kick_seen_straight_after_a_ball_gap_is_backdated_to_mid_gap():
+    missing = np.zeros(400, dtype=bool)
+    missing[100:140] = True
+    assert dead_ball.backdated(143, 140, missing, 0, P) == 120
+    missing[:300] = True
+    assert dead_ball.backdated(303, 300, missing, 0, P) == 300 - P.restart_backdate_max_frames
+    assert dead_ball.backdated(303, 300, missing, 270, P) == 270
+    off = dataclasses.replace(P, restart_backdate_max_frames=0)
+    assert dead_ball.backdated(303, 300, missing, 0, off) == 303
+
+
+def test_rule8_a_kick_after_the_ball_was_seen_still_is_not_backdated():
+    missing = np.zeros(400, dtype=bool)
+    missing[100:120] = True
+    assert dead_ball.backdated(133, 130, missing, 0, P) == 133
+
+
+def test_rule8_a_restart_hidden_by_a_ball_gap_happens_inside_it():
+    n = 600
+    ball = np.column_stack([np.full(n, 50.0), np.full(n, 30.0)])
+    ball[300:340] = [50.0, 68.8]
+    ball[340:] = np.column_stack([50 + 0.2 * np.arange(n - 340), np.full(n - 340, 30.0)])
+    ball = with_kickoff(ball)
+    ball[340:370] = np.nan
+    speed = evidence.ball_speed(ball)
+    median = np.full(n, 3.0)
+    off = dataclasses.replace(P, restart_backdate_max_frames=0)
+    unshifted = dead_ball.stoppages(ball, speed, median, PITCH, 0, n - 1, off)[-1]
+    assert unshifted in ((300, 370), (300, 371))
+    assert dead_ball.stoppages(ball, speed, median, PITCH, 0, n - 1, P)[-1] == (300, 355)

@@ -161,3 +161,26 @@ ball seen from the published kickoff to the opening kick: 100%
   - That is an order-of-magnitude estimate. The degradation overlays our match's gap pattern without aligning it to restarts, so the true share of gapped restarts on our match is unknown.
 - **Next step proposed:** a restart hidden by a ball gap is backdated into the gap, by analogy with rule 5 (gains), and validated with this script and the sample-game spellF1. Decide it on the degraded sample, never on our match or the public 5 minutes.
 - **Side finding, not acted on:** 28 of 90 restarts get no predicted stoppage at all, even on the clean sample. This is likely an artefact of the proxy: the sample's ball is blank while out of play, so rule 6 (ball out) cannot fire there. Check it before trusting the number.
+
+## 10. Gap-backdated restarts: tried on the sample game, not worth shipping (29 Oct)
+
+**The rule tried** (`dead_ball.backdated()`, by analogy with rule 5): when a kick's travel is first seen straight after a ball gap, the restart is dated mid-gap. It moves at most 2 s earlier (`restart_backdate_max_frames`), and never before the stoppage began.
+
+**A fairer proxy came first.** The sample's ball is missing on **100%** of its dead frames, so 88 of 90 restarts follow a gap, and the rule would fire on almost all of them. `degrade.fill_dead_ball()` therefore places the ball, still, at its restart position over each dead stretch, before our gap pattern is laid over it. That is an a priori assumption, not a fit. The ball is then seen on 58% of dead frames, close to the 66% in our public window.
+
+Results from `python team_a/scripts/restart_latency.py` (public data only):
+
+| Proxy | Variant | spellF1 [CI] | Gap-hidden restarts: median lag, > 1 s late | Restarts > 1 s early |
+|---|---|---|---|---|
+| Degraded, dead ball filled (**the fair test**) | as before | 0.397 [0.359–0.437] | +2.3 s, 82% | 1% |
+| | backdated | 0.400 [0.362–0.440] | +2.0 s, 68% | 3% |
+| Degraded (dead ball blank) | as before | 0.376 [0.335–0.416] | +1.8 s, 67% | 3% |
+| | backdated | 0.369 [0.329–0.408] | +1.3 s, 55% | **21%** |
+| Clean (dead ball blank) | as before | 0.553 [0.515–0.590] | — | 2% |
+| | backdated | 0.518 [0.481–0.557] | — | **43%** |
+
+- **On the fair proxy the gain is noise:** +0.003 spellF1, and only 0.3 s of a 2.3 s median lag recovered.
+- **The gaps that hide restarts are mostly long.** The IQR of the lag runs to +6.4 s, so the restart and the play after it are both unseen. Half a gap capped at 2 s cannot reach that.
+- **The risk is real.** Wherever the ball goes unseen while play is dead, the rule backdates restarts that were not hidden (21–43% early above).
+- **Recommendation: do not ship.** Keep `fill_dead_ball()` and the comparison script, which any future restart or stoppage calibration needs.
+- **Next lever, measure before building:** a restart cue that does not need the ball, such as the collective acceleration of players at the restart. First check, on the fair proxy, that it separates restarts from open play.

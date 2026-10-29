@@ -47,3 +47,16 @@ def test_speeds_from_positions_constant_motion():
     xy[:, 0, 0] = np.arange(20) * 0.2
     speed = epts.speeds_from_positions(xy)
     np.testing.assert_allclose(speed[3:-3, 0], 5.0)
+
+
+def test_fill_dead_ball_waits_at_the_restart_spot_and_leaves_play_alone(tmp_path):
+    tracking = clean_match(tmp_path, n_frames=200)
+    tracking.ball_xy[50:100] = np.nan
+    tracking.ball_xy[150:160] = np.nan
+    tracking.ball_xy[100] = [20.0, 30.0]
+    labels = np.zeros(200, dtype=np.int8)
+    labels[40:100] = degrade.pm.D
+    out = degrade.fill_dead_ball(tracking, labels)
+    np.testing.assert_array_equal(out.ball_xy[50:100], np.tile([20.0, 30.0], (50, 1)))
+    np.testing.assert_array_equal(out.ball_xy[:50], tracking.ball_xy[:50])
+    assert np.isnan(out.ball_xy[150:160]).all()
