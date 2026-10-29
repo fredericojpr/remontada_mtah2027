@@ -29,14 +29,47 @@ class Tracking:
     pitch: tuple
 
 
-def slot_teams(meta_path):
+def slot_teams(meta_path, n_slots):
+    """[(first_frame_id, last_frame_id, team per column)] from the metadata.
+
+    When the metadata lists exactly one player per column, columns follow player order (the
+    organisers' convention, checked byte-for-byte by the doctor). Otherwise the columns are read
+    from each DataFormatSpecification, which changes with substitutions.
+    """
     root = ET.parse(meta_path).getroot()
     team_ids = [team.get("id") for team in root.iter("Team")]
     if len(team_ids) != 2:
         raise ValueError("expected 2 teams in metadata, found {}".format(len(team_ids)))
-    teams = [HOME if player.get("teamId") == team_ids[0] else AWAY
-             for player in root.iter("Player")]
-    return np.array(teams, dtype=np.int8)
+    side = {player.get("id"): HOME if player.get("teamId") == team_ids[0] else AWAY
+            for player in root.iter("Player")}
+    players = [player.get("id") for player in root.iter("Player")]
+    if len(players) == n_slots:
+        return [(None, None, np.array([side[p] for p in players], dtype=np.int8))]
+    owner = {channel.get("id"): channel.get("playerId") for channel in root.iter("PlayerChannel")}
+    specs = []
+    for spec in root.iter("DataFormatSpecification"):
+        refs = [ref.get("playerChannelId") for ref in spec.iter("PlayerChannelRef")]
+        columns = [side[owner[r]] for r in refs if r.endswith("_x")]
+        if len(columns) != n_slots:
+            raise ValueError("format block has {} columns, raw data has {}".format(
+                len(columns), n_slots))
+        specs.append((int(spec.get("startFrame")), int(spec.get("endFrame")),
+                      np.array(columns, dtype=np.int8)))
+    return specs
+
+
+def teams_per_frame(specs, frame_id):
+    if specs[0][0] is None:
+        return np.broadcast_to(specs[0][2], (len(frame_id), len(specs[0][2]))).copy()
+    out = np.full((len(frame_id), len(specs[0][2])), -1, dtype=np.int8)
+    for first, last, columns in specs:
+        out[(frame_id >= first) & (frame_id <= last)] = columns
+    return out
+
+
+def count_slots(raw_path):
+    with open(raw_path) as handle:
+        return len(handle.readline().split(":")[1].split(";"))
 
 
 def _slot_row(field, n_slots, number):
@@ -73,8 +106,10 @@ def load(meta_path, raw_path, pitch, cache_path=None):
         z = np.load(cache_path)
         return Tracking(z["frame_id"], z["ball_xy"], z["slot_xy"], z["slot_speed"],
                         z["slot_team"], pitch)
-    team = slot_teams(meta_path)
-    frame_id, ball, slot_xy, speed = parse_raw(raw_path, len(team))
+    n_slots = count_slots(raw_path)
+    specs = slot_teams(meta_path, n_slots)
+    frame_id, ball, slot_xy, speed = parse_raw(raw_path, n_slots)
+    team = teams_per_frame(specs, frame_id)
     scale = np.array(pitch, dtype=np.float64)
     tracking = Tracking(frame_id, ball * scale, slot_xy * scale, speed, team, pitch)
     if cache_path:
@@ -87,7 +122,7 @@ def load(meta_path, raw_path, pitch, cache_path=None):
 
 def load_match(source="tactical", game=games.GAME, data_dir=None):
     meta, raw = games.require(["atd_meta", "atd_raw"], game, data_dir, source)
-    cache = os.path.join(data_dir or games.DATA_DIR, "cache", "{}_{}.npz".format(game, source))
+    cache = os.path.join(data_dir or games.DATA_DIR, "cache", "{}_{}_v2.npz".format(game, source))
     return load(meta, raw, games.GAMES[game]["pitch"], cache)
 
 
@@ -97,6 +132,6 @@ def nearest_team(tracking):
     distance = delta[:, :, 0] * delta[:, :, 0] + delta[:, :, 1] * delta[:, :, 1]
     distance = np.where(np.isnan(distance), np.inf, distance)
     nearest = np.argmin(distance, axis=1)
-    team = tracking.slot_team[nearest].astype(np.int8)
+    team = tracking.slot_team[np.arange(len(nearest)), nearest].astype(np.int8)
     unseen = np.isnan(tracking.ball_xy[:, 0]) | np.isinf(distance.min(axis=1))
     return np.where(unseen, -1, team).astype(np.int8)

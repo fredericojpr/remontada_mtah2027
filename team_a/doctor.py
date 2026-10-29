@@ -74,7 +74,7 @@ def main():
     check("one record per video frame, frame_id 1..N",
           lambda: len(t.frame_id) == N_FRAMES
           and np.array_equal(t.frame_id, np.arange(1, N_FRAMES + 1)))
-    check("two teams, every slot assigned", lambda: set(t.slot_team.tolist()) == {0, 1})
+    check("two teams, every slot assigned", lambda: set(np.unique(t.slot_team).tolist()) == {0, 1})
 
     def rebuild_baseline_raw():
         codes = np.full(N_FRAMES, -1, dtype=np.int8)

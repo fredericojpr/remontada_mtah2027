@@ -19,7 +19,8 @@ def test_parse_shapes_and_units(tmp_path):
     tracking = epts.load(meta, raw, PITCH)
     assert tracking.frame_id.tolist() == list(range(1, 51))
     assert tracking.slot_xy.shape == (50, synth.N_SLOTS, 2)
-    assert tracking.slot_team.tolist() == [0, 0, 0, 1, 1, 1]
+    assert tracking.slot_team.shape == (50, synth.N_SLOTS)
+    assert tracking.slot_team[0].tolist() == [0, 0, 0, 1, 1, 1]
     assert np.nanmax(tracking.slot_xy[:, :, 0]) <= PITCH[0]
     assert np.isnan(tracking.slot_xy[7]).all()
 
