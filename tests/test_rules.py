@@ -142,3 +142,15 @@ def test_rule10_half_starts_dead_until_kickoff_and_only_halves_are_graded():
     assert text[:100] == "X" * 100 and text[350:] == "X" * 50
     assert set(text[100:151]) == {"D"} and "X" not in text[100:350]
     assert text.index("H") in (151, 152)
+
+
+def test_rule10_kicks_away_from_the_centre_mark_do_not_start_the_half():
+    n = 400
+    ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
+    ball[100:120] = np.column_stack([np.linspace(20.0, 30.0, 20), np.full(20, 34.0)])
+    ball[200:] = np.column_stack([52.5 + 0.2 * np.arange(n - 200), np.full(n - 200, 34.0)])
+    tracking = scene(n, ball, [52.5, 34.5], [60.0, 34.0])
+    tracking.ball_xy = ball
+    text = string(possession.label_match(tracking, [(90, 349)], n))
+    assert set(text[90:201]) == {"D"}
+    assert text.index("H") in (201, 202)

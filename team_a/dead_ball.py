@@ -56,7 +56,8 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params):
     """[(dead_from, restart_at)] inside one graded half, frames [first, last].
 
     Rule 6: ball out. Rule 7: collective halt. Rule 8: restart on a kick, or when players move
-    again with the ball unseen after a halt. Each half starts dead until its kickoff (rule 10).
+    again with the ball unseen after a halt. Each half starts dead until its kickoff, the first
+    kick from the centre mark (rule 10).
     """
     stop = last + 1
     window = slice(first, stop)
@@ -73,12 +74,17 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params):
         + [(f, "halt") for f in run_starts(slow & still_ball, params.halt_frames)])
     kicks = np.array(kick_frames(kicked, s, params), dtype=np.int64)
     resumes = np.array(run_starts(missing & moving, params.resume_frames), dtype=np.int64)
+    centre = np.array(pitch) / 2.0
+    at_spot = np.hypot(*(b[kicks] - centre).T) <= params.kickoff_spot_radius_m if len(kicks) \
+        else np.zeros(0, dtype=bool)
+    kickoffs = kicks[at_spot] if at_spot.any() else kicks
 
     found, t = [], 0
     for begin, kind in [(0, "kickoff")] + starts:
         if begin < t:
             continue
-        options = [kicks[kicks >= begin][:1]]
+        pool = kickoffs if kind == "kickoff" else kicks
+        options = [pool[pool >= begin][:1]]
         if kind == "halt":
             options.append(resumes[resumes >= begin][:1])
         options = np.concatenate(options)

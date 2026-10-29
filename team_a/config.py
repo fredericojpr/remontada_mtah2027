@@ -42,6 +42,9 @@ class Params:
     min_play_frames: int = 50
     resume_frames: int = 25
 
+    # Rule 10: a half opens with a kick from the centre mark (tracking error plus placement).
+    kickoff_spot_radius_m: float = 2.0
+
     # Rule 9: the taker stands over the ball in the last second before the restart.
     taker_window_frames: int = 25
 
