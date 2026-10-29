@@ -14,7 +14,7 @@ import sys
 
 import numpy as np
 
-from team_a import epts, possession
+from team_a import epts, evidence, possession
 from team_a.config import DEFAULT
 
 ROOT = epts.ROOT
@@ -34,8 +34,7 @@ TOLERANCE_FRAMES = 50
 PRE_KICKOFF_DEAD_SHARE = 0.9
 
 
-def build(params=None, report=None, kickoff_tags=True):
-    tracking = epts.load_match("tactical")
+def build(tracking, params=None, report=None, kickoff_tags=True):
     blocks = games.half_video_blocks(games.GAME)
     halves = [(first, last) for _, first, last in blocks]
     tags = None
@@ -78,6 +77,37 @@ def checks(labels):
             "pre_dead": 100.0 * np.mean(pre == pm.D), "play1": play1, "play2": play2, "ok": ok}
 
 
+def opening_breakdown(labels, entry, ball, first, last, kickoff):
+    """Where a half's opening goes wrong, as aggregates, measured from a published kickoff that is
+    only the reference point, as in checks(); nothing here feeds the labelling."""
+    kick = entry["opening_kick"]
+    alive = np.flatnonzero(np.isin(labels[first:last + 1], (pm.H, pm.A)))
+    live = first + int(alive[0]) if len(alive) else last + 1
+    after = labels[kick:kick + SUSTAINED_PLAY_FRAMES]
+    return {
+        "kick_s": (kick - kickoff) / 25.0,
+        "live_s": (live - kickoff) / 25.0,
+        "opening_made_by": entry["stoppages"][0][2],
+        "dead_after_kick_s": np.sum(after == pm.D) / 25.0,
+        "stoppages_after_kick": [k for b0, _, k in entry["stoppages"]
+                                 if kick < b0 <= kick + SUSTAINED_PLAY_FRAMES],
+        "ball_seen_to_kick": (100.0 * np.mean(~np.isnan(ball[kickoff:kick, 0]))
+                              if kick > kickoff else None),
+    }
+
+
+def print_breakdown(b):
+    print("  2nd-half opening diagnostic (published kickoff as reference only):")
+    print("    opening kick {:+.1f} s   first live frame {:+.1f} s   from the published "
+          "kickoff".format(b["kick_s"], b["live_s"]))
+    print("    opening dead stretch made by: {}".format(b["opening_made_by"]))
+    print("    in the 10 s after the opening kick: {:.1f} s dead, stoppages starting: {}".format(
+        b["dead_after_kick_s"], ", ".join(b["stoppages_after_kick"]) or "none"))
+    print("    ball seen from the published kickoff to the opening kick: {}".format(
+        "n/a (kick not late)" if b["ball_seen_to_kick"] is None
+        else "{:.0f}%".format(b["ball_seen_to_kick"])))
+
+
 def describe(name, labels, gt):
     c = checks(labels)
     r = pm.evaluate(gt, labels, bootstrap_n=1000)
@@ -101,14 +131,20 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     gt = pm.label_codes(pm.read_label_csv(PUBLIC_GT))
-    branches = []
-    labels = build(report=branches)
+    tracking = epts.load_match("tactical")
+    report = []
+    labels = build(tracking, report=report)
     reason, digest = write(labels, args.out)
     print("validator  {}".format("OK" if reason is None else "FAIL: " + reason))
     describe("written file (half opens on first kick at or after its Smart Tagging kickoff window, "
-             "followed by 10 s of play): {} / {}".format(*branches), labels, gt)
+             "followed by 10 s of play): {} / {}".format(*[r["branch"] for r in report]),
+             labels, gt)
+    _, (_, first2, last2) = games.half_video_blocks(games.GAME)
+    print_breakdown(opening_breakdown(labels, report[1],
+                                      evidence.clean_ball(tracking.ball_xy, DEFAULT),
+                                      first2, last2, PUBLISHED_SECOND_HALF_KICKOFF))
     describe("comparison, not written (no Smart Tagging, as in aa57441)",
-             build(kickoff_tags=False), gt)
+             build(tracking, kickoff_tags=False), gt)
     describe("comparison, not written (Smart Tagging, then plain first kick)",
-             build(params=dataclasses.replace(DEFAULT, opening_play_frames=0)), gt)
+             build(tracking, params=dataclasses.replace(DEFAULT, opening_play_frames=0)), gt)
     print("sha256  {}".format(digest))

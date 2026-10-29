@@ -125,3 +125,62 @@ Run locally by the PM; aggregate output only:
   Either way the cost is timing on a single transition (about 0.01–0.03 spellF1 at our §7 per-error rates), well inside noise. Do not loosen `TOLERANCE_FRAMES` or adjust a kick parameter until this check passes; that would turn the published kickoff into a tuning target.
 - **The §6 revert decision now has its evidence.** The "10 s of play" logic again changes no aggregate, with or without the tag.
 - New file sha256: `e4a73f39f4365e83267e9518c49970a0d6177556591c8af20d726a47c9886488`. It is the recommended replacement for `0213b1b8…` as the 1 Nov insurance submission.
+
+## 8. Diagnosis of the +3 s residual (29 Oct)
+
+`pipeline.py` now prints a 2nd-half opening breakdown. The published kickoff is used only as the reference point of the measurement. Run locally by the PM, aggregate output only; the file sha256 is unchanged (`e4a73f39…`), so the diagnostic does not alter the labels.
+
+```
+opening kick +3.4 s   first live frame +3.4 s   from the published kickoff
+opening dead stretch made by: kickoff
+in the 10 s after the opening kick: 0.0 s dead, stoppages starting: none
+ball seen from the published kickoff to the opening kick: 100%
+```
+
+- **The opening kick itself is late.** The half does not open early, and no stoppage follows it.
+- **The ball was tracked on every frame from the real kickoff to our opening kick.** So the real kickoff tap was visible, but did not meet our kick definition (rule 8: the ball travels ≥ 1.5 m within 0.5 s, from inside the pitch). The first movement that did was 3.4 s later, probably the next pass.
+- **Likely cause, not yet confirmed:** a short tap. Since 2016 the Laws allow the kickoff in any direction, and it only has to clearly move, so a tap of under 1.5 m to a teammate is legal and common. A tracked ball that lags or freezes at the tap would look the same in these aggregates.
+- **Why it matters beyond this kickoff:** rule 8 uses the same kick definition to time **every** restart, about 105 on our match. Short free kicks, short corners and kickoffs after goals would be late in the same way. This is a possible systematic error, not a one-off.
+- **Not fixed here.** Changing the kick definition until this kickoff lines up would tune on the published kickoff.
+- **Next step:** measure restart latency (signed, by restart type) on the degraded public sample game, with the scorer's transition matching. That is another game, so this is allowed, and a hosted assistant may run it. Change the kick definition only if restarts there are systematically late, and only to a rule justified by the Laws, validated on the sample game. Then read the kickoff line here as a correctness check.
+
+## 9. Restart latency on the public sample game (29 Oct)
+
+`team_a/scripts/restart_latency.py` covers the 90 set pieces of Metrica Sample Game 3. Its event frames are the true restarts. It is another game, so a hosted assistant may run it, and it reads nothing from our match. Values are our restart minus the true restart, with the IQR in brackets:
+
+| Group | Clean sample | Degraded sample (like our ATD) |
+|---|---|---|
+| All 90 restarts | +0.1 s [0.0, +0.2]; 11% > 1 s late | +0.4 s [0.0, +2.0]; **38% > 1 s late** |
+| Taps: ball moves < 1.5 m in 0.5 s (3 of 90) | +1.4 s; 2 of 3 > 1 s late | +1.9 s; 2 of 3 > 1 s late |
+| Ball tracked through the kick window (45) | — | +0.1 s [0.0, +0.2]; 6% > 1 s late |
+| **Ball gap in the kick window (45)** | — | **+1.8 s [+0.5, +3.2]; 67% > 1 s late** |
+
+- **The tap explanation for §8 holds, but taps are rare.** Rule 8 misses taps, which come out about 1.5 s late. Only 3% of restarts are taps, though, so a tap-aware kick rule would recover perhaps 0.003 spellF1 on our match. That is not worth the risk of false kicks from jitter: the 1.5 m threshold is what makes the kick rule jitter-proof. **Decision proposed: accept the kickoff residual as understood.**
+- **The real restart-timing error is ball gaps at the restart.** When the ball is unseen in the first 0.5 s, the first kick is only seen once the ball reappears. On the degraded sample that is half of all restarts.
+  - A rough scale-up from the per-error costs in DISCOVERY §7: about 2 s late costs about 0.02 per transition on 17 possessions, so about 0.001 on our 371. Over about 50 affected restarts that is **about 0.02–0.05 spellF1**.
+  - That is an order-of-magnitude estimate. The degradation overlays our match's gap pattern without aligning it to restarts, so the true share of gapped restarts on our match is unknown.
+- **Next step proposed:** a restart hidden by a ball gap is backdated into the gap, by analogy with rule 5 (gains), and validated with this script and the sample-game spellF1. Decide it on the degraded sample, never on our match or the public 5 minutes.
+- **Side finding, not acted on:** 28 of 90 restarts get no predicted stoppage at all, even on the clean sample. This is likely an artefact of the proxy: the sample's ball is blank while out of play, so rule 6 (ball out) cannot fire there. Check it before trusting the number.
+
+## 10. Gap-backdated restarts: tried on the sample game, not worth shipping (29 Oct)
+
+**The rule tried** (`dead_ball.backdated()`, by analogy with rule 5): when a kick's travel is first seen straight after a ball gap, the restart is dated mid-gap. It moves at most 2 s earlier (`restart_backdate_max_frames`), and never before the stoppage began.
+
+**A fairer proxy came first.** The sample's ball is missing on **100%** of its dead frames, so 88 of 90 restarts follow a gap, and the rule would fire on almost all of them. `degrade.fill_dead_ball()` therefore places the ball, still, at its restart position over each dead stretch, before our gap pattern is laid over it. That is an a priori assumption, not a fit. The ball is then seen on 58% of dead frames, close to the 66% in our public window.
+
+Results from `python team_a/scripts/restart_latency.py` (public data only):
+
+| Proxy | Variant | spellF1 [CI] | Gap-hidden restarts: median lag, > 1 s late | Restarts > 1 s early |
+|---|---|---|---|---|
+| Degraded, dead ball filled (**the fair test**) | as before | 0.397 [0.359–0.437] | +2.3 s, 82% | 1% |
+| | backdated | 0.400 [0.362–0.440] | +2.0 s, 68% | 3% |
+| Degraded (dead ball blank) | as before | 0.376 [0.335–0.416] | +1.8 s, 67% | 3% |
+| | backdated | 0.369 [0.329–0.408] | +1.3 s, 55% | **21%** |
+| Clean (dead ball blank) | as before | 0.553 [0.515–0.590] | — | 2% |
+| | backdated | 0.518 [0.481–0.557] | — | **43%** |
+
+- **On the fair proxy the gain is noise:** +0.003 spellF1, and only 0.3 s of a 2.3 s median lag recovered.
+- **The gaps that hide restarts are mostly long.** The IQR of the lag runs to +6.4 s, so the restart and the play after it are both unseen. Half a gap capped at 2 s cannot reach that.
+- **The risk is real.** Wherever the ball goes unseen while play is dead, the rule backdates restarts that were not hidden (21–43% early above).
+- **Not shipped.** The rule was removed after commit `12670ba`, which keeps it so this table can be reproduced. The submission is unchanged (`e4a73f39…`). `fill_dead_ball()` and the restart latency script stay, because any future restart or stoppage calibration needs them.
+- **Next lever, measure before building:** a restart cue that does not need the ball, such as the collective acceleration of players at the restart. First check, on the fair proxy, that it separates restarts from open play.

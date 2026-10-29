@@ -6,6 +6,10 @@ Three a priori degradations, none fitted to our match's labels or scores:
     sample frame by frame so gap lengths and clustering are kept;
   - Gaussian position noise on ball and players;
   - player dropouts in short blocks, so about 20.5 of 22 players are seen, as in our match.
+
+The sample's own ball is blank whenever play is dead, which ours is not, so restart timing cannot
+be tested on it directly. fill_dead_ball() first puts the ball, still, where play restarts, over
+every dead stretch: an a priori assumption (the ball waits at the restart spot), not a fit.
 """
 
 import dataclasses
@@ -15,6 +19,7 @@ import sys
 import numpy as np
 
 from team_a import epts
+from team_a.evidence import runs
 
 sys.path.insert(0, os.path.join(epts.ROOT, "evaluation"))
 import games  # noqa: E402
@@ -52,3 +57,19 @@ def degrade(tracking, seed=SEED, ball_noise_m=BALL_NOISE_M, player_noise_m=PLAYE
     speeds = np.where(dropped, np.nan, tracking.slot_speed)
 
     return dataclasses.replace(tracking, ball_xy=ball, slot_xy=slots, slot_speed=speeds)
+
+
+def fill_dead_ball(tracking, labels, look_ahead=25):
+    """The ball, still at its restart position, on the unseen frames of every dead stretch.
+
+    The restart position is where the ball is first seen within look_ahead frames of the restart;
+    a stretch with no such sighting is left as it is.
+    """
+    ball = tracking.ball_xy.copy()
+    for start, stop in runs(labels == pm.D):
+        seen = np.flatnonzero(~np.isnan(ball[stop:stop + look_ahead, 0]))
+        if not len(seen):
+            continue
+        stretch = ball[start:stop]
+        stretch[np.isnan(stretch[:, 0])] = ball[stop + seen[0]]
+    return dataclasses.replace(tracking, ball_xy=ball)
