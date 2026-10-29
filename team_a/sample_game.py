@@ -48,7 +48,10 @@ def download():
 
 def load_tracking():
     download()
-    return epts.load(path("meta"), path("raw"), PITCH, os.path.join(FOLDER, "cache_v2.npz"))
+    tracking = epts.load(path("meta"), path("raw"), PITCH, os.path.join(FOLDER, "cache_v2.npz"))
+    if np.isnan(tracking.slot_speed).all():
+        tracking.slot_speed = epts.speeds_from_positions(tracking.slot_xy)
+    return tracking
 
 
 def load_events():

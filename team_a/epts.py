@@ -126,6 +126,18 @@ def load_match(source="tactical", game=games.GAME, data_dir=None):
     return load(meta, raw, games.GAMES[game]["pitch"], cache)
 
 
+def speeds_from_positions(slot_xy, fps=25, window=5):
+    step = np.full(slot_xy.shape[:2], np.nan)
+    step[1:] = np.hypot(*(slot_xy[1:] - slot_xy[:-1]).transpose(2, 0, 1)) * fps
+    filled = np.nan_to_num(step)
+    seen = (~np.isnan(step)).astype(np.float64)
+    kernel = np.ones(window)
+    total = np.apply_along_axis(np.convolve, 0, filled, kernel, "same")
+    count = np.apply_along_axis(np.convolve, 0, seen, kernel, "same")
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(count > 0, total / count, np.nan)
+
+
 def nearest_team(tracking):
     """Team of the slot nearest the ball per frame (-1 when the ball or every slot is unseen)."""
     delta = tracking.slot_xy - tracking.ball_xy[:, None, :]
