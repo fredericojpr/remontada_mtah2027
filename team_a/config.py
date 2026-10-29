@@ -35,9 +35,9 @@ class Params:
     halt_frames: int = 75
     still_ball_mps: float = 1.0
 
-    # Rule 8: a set piece is a kick, not a player standing over the ball.
-    kick_speed_mps: float = 3.0
-    kick_frames: int = 3
+    # Rule 8: a set piece is a kick: the ball travels, which tracking jitter cannot fake.
+    kick_distance_m: float = 1.5
+    kick_window_frames: int = 12
     min_stoppage_frames: int = 50
     min_play_frames: int = 50
     resume_frames: int = 25

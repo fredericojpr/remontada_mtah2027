@@ -4,6 +4,7 @@ import warnings
 
 import numpy as np
 
+from team_a.config import FPS
 from team_a.evidence import NONE, runs
 
 
@@ -18,6 +19,33 @@ def beyond_lines(ball, pitch, margin):
     x, y = ball[:, 0], ball[:, 1]
     with np.errstate(invalid="ignore"):
         return (x < -margin) | (x > length + margin) | (y < -margin) | (y > width + margin)
+
+
+def travels(ball, pitch, params):
+    """Frames from which the in-bounds ball covers the kick distance within the kick window."""
+    k = params.kick_window_frames
+    out = np.zeros(len(ball), dtype=bool)
+    if len(ball) <= k:
+        return out
+    start, end = ball[:-k], ball[k:]
+    with np.errstate(invalid="ignore"):
+        far = np.hypot(*(end - start).T) >= params.kick_distance_m
+    inside = ~beyond_lines(start, pitch, 0.0) & ~np.isnan(start[:, 0]) & ~np.isnan(end[:, 0])
+    out[:-k] = far & inside
+    return out
+
+
+def kick_frames(travelling, speed, params):
+    """The frame the ball is struck: inside each travel window, the first frame faster than the
+    window's average kick speed."""
+    threshold = params.kick_distance_m * FPS / params.kick_window_frames
+    out = []
+    for start, stop in runs(travelling):
+        window = speed[start:min(stop, start + params.kick_window_frames + 1)]
+        with np.errstate(invalid="ignore"):
+            fast = np.flatnonzero(window > threshold)
+        out.append(start + int(fast[0]) if len(fast) else start)
+    return out
 
 
 def run_starts(mask, min_frames):
@@ -38,12 +66,12 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params):
         slow = m < params.halt_speed_mps
         moving = m > params.halt_speed_mps
         still_ball = missing | (s < params.still_ball_mps)
-        kicked = ~missing & ~beyond_lines(b, pitch, 0.0) & (s > params.kick_speed_mps)
+        kicked = travels(b, pitch, params)
 
     starts = sorted([(f, "out") for f in run_starts(
         beyond_lines(b, pitch, params.out_margin_m), params.out_frames)]
         + [(f, "halt") for f in run_starts(slow & still_ball, params.halt_frames)])
-    kicks = np.array(run_starts(kicked, params.kick_frames), dtype=np.int64)
+    kicks = np.array(kick_frames(kicked, s, params), dtype=np.int64)
     resumes = np.array(run_starts(missing & moving, params.resume_frames), dtype=np.int64)
 
     found, t = [], 0

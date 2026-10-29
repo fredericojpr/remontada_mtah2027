@@ -62,8 +62,9 @@ if __name__ == '__main__':
     n_spells, mean_s, n_stops, kickoff = summary(labels)
     print("possessions {}  mean {:.1f} s  stoppages {}".format(n_spells, mean_s, n_stops))
     near = abs(kickoff - PUBLISHED_SECOND_HALF_KICKOFF) <= KICKOFF_TOLERANCE_FRAMES
-    print("2nd-half kickoff detected within 2 s of the published frame: {}".format(
-        "PASS" if near else "FAIL"))
+    offset = (kickoff - PUBLISHED_SECOND_HALF_KICKOFF) / 25.0
+    print("2nd-half kickoff detected within 2 s of the published frame: {}  ({:+.0f} s)".format(
+        "PASS" if near else "FAIL", offset))
 
     gt = pm.label_codes(pm.read_label_csv(PUBLIC_GT))
     result = pm.evaluate(gt, labels, bootstrap_n=1000)
