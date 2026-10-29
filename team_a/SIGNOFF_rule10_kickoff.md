@@ -143,3 +143,21 @@ ball seen from the published kickoff to the opening kick: 100%
 - **Why it matters beyond this kickoff:** rule 8 uses the same kick definition to time **every** restart, about 105 on our match. Short free kicks, short corners and kickoffs after goals would be late in the same way. This is a possible systematic error, not a one-off.
 - **Not fixed here.** Changing the kick definition until this kickoff lines up would tune on the published kickoff.
 - **Next step:** measure restart latency (signed, by restart type) on the degraded public sample game, with the scorer's transition matching. That is another game, so this is allowed, and a hosted assistant may run it. Change the kick definition only if restarts there are systematically late, and only to a rule justified by the Laws, validated on the sample game. Then read the kickoff line here as a correctness check.
+
+## 9. Restart latency on the public sample game (29 Oct)
+
+`team_a/scripts/restart_latency.py` covers the 90 set pieces of Metrica Sample Game 3. Its event frames are the true restarts. It is another game, so a hosted assistant may run it, and it reads nothing from our match. Values are our restart minus the true restart, with the IQR in brackets:
+
+| Group | Clean sample | Degraded sample (like our ATD) |
+|---|---|---|
+| All 90 restarts | +0.1 s [0.0, +0.2]; 11% > 1 s late | +0.4 s [0.0, +2.0]; **38% > 1 s late** |
+| Taps: ball moves < 1.5 m in 0.5 s (3 of 90) | +1.4 s; 2 of 3 > 1 s late | +1.9 s; 2 of 3 > 1 s late |
+| Ball tracked through the kick window (45) | — | +0.1 s [0.0, +0.2]; 6% > 1 s late |
+| **Ball gap in the kick window (45)** | — | **+1.8 s [+0.5, +3.2]; 67% > 1 s late** |
+
+- **The tap explanation for §8 holds, but taps are rare.** Rule 8 misses taps, which come out about 1.5 s late. Only 3% of restarts are taps, though, so a tap-aware kick rule would recover perhaps 0.003 spellF1 on our match. That is not worth the risk of false kicks from jitter: the 1.5 m threshold is what makes the kick rule jitter-proof. **Decision proposed: accept the kickoff residual as understood.**
+- **The real restart-timing error is ball gaps at the restart.** When the ball is unseen in the first 0.5 s, the first kick is only seen once the ball reappears. On the degraded sample that is half of all restarts.
+  - A rough scale-up from the per-error costs in DISCOVERY §7: about 2 s late costs about 0.02 per transition on 17 possessions, so about 0.001 on our 371. Over about 50 affected restarts that is **about 0.02–0.05 spellF1**.
+  - That is an order-of-magnitude estimate. The degradation overlays our match's gap pattern without aligning it to restarts, so the true share of gapped restarts on our match is unknown.
+- **Next step proposed:** a restart hidden by a ball gap is backdated into the gap, by analogy with rule 5 (gains), and validated with this script and the sample-game spellF1. Decide it on the degraded sample, never on our match or the public 5 minutes.
+- **Side finding, not acted on:** 28 of 90 restarts get no predicted stoppage at all, even on the clean sample. This is likely an artefact of the proxy: the sample's ball is blank while out of play, so rule 6 (ball out) cannot fire there. Check it before trusting the number.
