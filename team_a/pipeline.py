@@ -22,7 +22,10 @@ sys.path.insert(0, os.path.join(ROOT, "evaluation"))
 sys.path.insert(0, os.path.join(ROOT, "starter"))
 import baseline  # noqa: E402
 import games  # noqa: E402
+import load_smart_tagging  # noqa: E402
 import possession_metrics as pm  # noqa: E402
+
+from team_a.dead_ball import kickoff_tag_starts  # noqa: E402
 
 PUBLIC_GT = os.path.join(ROOT, "evaluation", "gt", "BAR-ATH_possession_gt_public.csv")
 PUBLISHED_SECOND_HALF_KICKOFF = 113742
@@ -31,12 +34,17 @@ TOLERANCE_FRAMES = 50
 PRE_KICKOFF_DEAD_SHARE = 0.9
 
 
-def build(params=None, report=None):
+def build(params=None, report=None, kickoff_tags=True):
     tracking = epts.load_match("tactical")
-    halves = [(first, last) for _, first, last in games.half_video_blocks(games.GAME)]
+    blocks = games.half_video_blocks(games.GAME)
+    halves = [(first, last) for _, first, last in blocks]
+    tags = None
+    if kickoff_tags:
+        starts = kickoff_tag_starts(load_smart_tagging.load())
+        tags = [starts.get(half) for half, _, _ in blocks]
     kwargs = {} if params is None else {"params": params}
     return possession.label_match(tracking, halves, games.source_frames("tactical"),
-                                  report=report, **kwargs)
+                                  report=report, kickoff_tags=tags, **kwargs)
 
 
 def write(labels, path):
@@ -97,8 +105,10 @@ if __name__ == '__main__':
     labels = build(report=branches)
     reason, digest = write(labels, args.out)
     print("validator  {}".format("OK" if reason is None else "FAIL: " + reason))
-    describe("written file (half opens on first kick followed by 10 s of play): {} / {}".format(
-        *branches), labels, gt)
-    describe("comparison, not written (half opens on first kick, as in ef5cc80)",
+    describe("written file (half opens on first kick at or after its Smart Tagging kickoff window, "
+             "followed by 10 s of play): {} / {}".format(*branches), labels, gt)
+    describe("comparison, not written (no Smart Tagging, as in aa57441)",
+             build(kickoff_tags=False), gt)
+    describe("comparison, not written (Smart Tagging, then plain first kick)",
              build(params=dataclasses.replace(DEFAULT, opening_play_frames=0)), gt)
     print("sha256  {}".format(digest))

@@ -166,3 +166,62 @@ def test_rule10_opening_is_the_first_kick_followed_by_play_and_zero_window_is_fi
     zero = dataclasses.replace(P, opening_play_frames=0)
     assert dead_ball.opening_restart(kicks, [130], 2000, zero)[0] == 100
     assert dead_ball.opening_restart(kicks, [130, 950], 2000, P) == (100, "first kick")
+
+
+def tag(code, kind, half, start_frame):
+    return {"code": code, "start_frame": start_frame, "tags": {"Type": kind, "Half": half}}
+
+
+def test_rule10_kickoff_tag_starts_reads_only_start_of_half_kickoffs():
+    events = [tag("SET PIECES", "Kick Off (Start)", "1st Half", 100),
+              tag("set pieces", "kick off (start)", "2nd Half", 900),
+              tag("SET PIECES", "Kick Off (After Goal)", "2nd Half", 500),
+              tag("SET PIECES", "Throw-in", "2nd Half", 400),
+              tag("BUILD UP", "Kick Off (Start)", "2nd Half", 300)]
+    assert dead_ball.kickoff_tag_starts(events) == {1: 100, 2: 900}
+    assert dead_ball.kickoff_tag_starts(events[2:]) == {}
+
+
+def pre_kickoff_play(n=1500):
+    """Play-like movement from the half's first frame, then the ball at the centre mark until a
+    kickoff at 600; players never stand still, so no stoppage rule fires before it."""
+    ball = np.tile([52.5, 34.0], (n, 1))
+    ball[50:200] = np.column_stack([np.linspace(40.0, 52.5, 150), np.full(150, 34.0)])
+    ball[600:] = np.column_stack([52.5 + 0.2 * np.arange(n - 600), np.full(n - 600, 34.0)])
+    return ball, np.full(n, 3.0)
+
+
+def test_rule10_kicks_before_the_kickoff_tag_do_not_open_the_half():
+    ball, median = pre_kickoff_play()
+    speed = evidence.ball_speed(ball)
+    untagged = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P)
+    assert untagged[0][1] < 100
+    report = []
+    stops = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P, report, 590)
+    assert stops[0][0] == 0 and stops[0][1] in (600, 601, 602)
+    assert report == ["kickoff tag, first kick followed by play"]
+
+
+def test_rule10_kickoff_tag_before_the_half_changes_nothing():
+    ball, median = pre_kickoff_play()
+    speed = evidence.ball_speed(ball)
+    stops = dead_ball.stoppages(ball, speed, median, PITCH, 100, len(ball) - 1, P)
+    assert dead_ball.stoppages(ball, speed, median, PITCH, 100, len(ball) - 1, P, None, 10) == stops
+
+
+def test_rule10_without_a_kick_after_the_tag_falls_back_to_the_kicks():
+    ball, median = pre_kickoff_play()
+    speed = evidence.ball_speed(ball)
+    report = []
+    untagged = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P)
+    stops = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P, report, 1490)
+    assert stops == untagged and report[0].startswith("no kick after kickoff tag, ")
+
+
+def test_rule10_label_match_keeps_the_pre_kickoff_stretch_dead_with_a_tag():
+    ball, _ = pre_kickoff_play()
+    tracking = scene(len(ball), ball, [52.5, 34.5], [60.0, 34.0])
+    tracking.ball_xy = ball
+    text = string(possession.label_match(tracking, [(0, len(ball) - 1)], len(ball),
+                                         kickoff_tags=[590]))
+    assert set(text[:600]) == {"D"} and "D" not in text[603:850]

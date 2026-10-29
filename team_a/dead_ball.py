@@ -52,6 +52,27 @@ def run_starts(mask, min_frames):
     return [start for start, stop in runs(mask) if stop - start >= min_frames]
 
 
+KICKOFF_CODE = "set pieces"
+KICKOFF_TYPE = "kick off (start)"
+HALF_TAGS = {"1st half": 1, "2nd half": 2}
+
+
+def kickoff_tag_starts(events):
+    """{half number: first frame of its Smart Tagging 'Kick Off (Start)' window} (rule 10).
+
+    events as returned by starter/load_smart_tagging.load(). Matched case-insensitively; a half
+    with no such tag is absent, and the opening rule then falls back to the kicks alone.
+    """
+    out = {}
+    for event in events:
+        tags = {k.lower(): (v or "").strip().lower() for k, v in event["tags"].items()}
+        if ((event["code"] or "").strip().lower() == KICKOFF_CODE
+                and tags.get("type") == KICKOFF_TYPE and tags.get("half") in HALF_TAGS):
+            half = HALF_TAGS[tags["half"]]
+            out[half] = min(out.get(half, event["start_frame"]), event["start_frame"])
+    return out
+
+
 def opening_restart(kicks, stoppage_starts, n, params):
     """(restart, branch): the first kick after which play runs on without a new stoppage for the
     opening-play window (rule 10). Taps before a kickoff are followed by players standing still
@@ -65,11 +86,14 @@ def opening_restart(kicks, stoppage_starts, n, params):
     return n, "no kick found"
 
 
-def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None):
+def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None,
+              kickoff_tag=None):
     """[(dead_from, restart_at)] inside one graded half, frames [first, last].
 
     Rule 6: ball out. Rule 7: collective halt. Rule 8: restart on a kick, or when players move
-    again with the ball unseen after a halt. Rule 10: each half starts dead until its kickoff.
+    again with the ball unseen after a halt. Rule 10: each half starts dead until its kickoff;
+    with a Smart Tagging kickoff window starting at frame kickoff_tag, kicks before it are not
+    the kickoff.
     """
     stop = last + 1
     window = slice(first, stop)
@@ -86,7 +110,13 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None
         + [(f, "halt") for f in run_starts(slow & still_ball, params.halt_frames)])
     kicks = np.array(kick_frames(kicked, s, params), dtype=np.int64)
     resumes = np.array(run_starts(missing & moving, params.resume_frames), dtype=np.int64)
-    opening, branch = opening_restart(kicks, [f for f, _ in starts], stop - first, params)
+    candidates, prefix = kicks, ""
+    if kickoff_tag is not None:
+        tagged = kicks[kicks >= kickoff_tag - first]
+        candidates, prefix = ((tagged, "kickoff tag, ") if len(tagged)
+                              else (kicks, "no kick after kickoff tag, "))
+    opening, branch = opening_restart(candidates, [f for f, _ in starts], stop - first, params)
+    branch = prefix + branch
     if report is not None:
         report.append(branch)
 

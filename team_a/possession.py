@@ -37,8 +37,9 @@ def label_half(labels, first, last, stops, gain_events, nearest, params):
     labels[since:last + 1] = state
 
 
-def label_match(tracking, halves, n_frames, params=DEFAULT, report=None):
-    """H/A/D per graded frame, X elsewhere. halves: [(first, last)] video frames, inclusive."""
+def label_match(tracking, halves, n_frames, params=DEFAULT, report=None, kickoff_tags=None):
+    """H/A/D per graded frame, X elsewhere. halves: [(first, last)] video frames, inclusive.
+    kickoff_tags: per half, the first frame of its Smart Tagging kickoff window, or None."""
     if not np.array_equal(tracking.frame_id, np.arange(1, len(tracking.frame_id) + 1)):
         raise ValueError("tracking must hold one record per video frame, frame_id 1..N")
     ball = evidence.clean_ball(tracking.ball_xy, params)
@@ -53,9 +54,9 @@ def label_match(tracking, halves, n_frames, params=DEFAULT, report=None):
                        np.where(home <= away, H, A)).astype(np.int8)
 
     labels = np.full(n_frames, X, dtype=np.int8)
-    for first, last in halves:
+    for (first, last), tag in zip(halves, kickoff_tags or [None] * len(halves)):
         stops = dead_ball.stoppages(ball, speed, median_speed, tracking.pitch, first, last, params,
-                                    report)
+                                    report, tag)
         inside = [(f, t) for f, t in gain_events if first <= f <= last]
         label_half(labels, first, last, stops, inside, nearest, params)
     return labels

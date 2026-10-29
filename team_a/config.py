@@ -42,7 +42,8 @@ class Params:
     min_play_frames: int = 50
     resume_frames: int = 25
 
-    # Rule 10: a half has started when play runs on for 10 s after a kick.
+    # Rule 10: a half has started when play runs on for 10 s after a kick, counting only kicks
+    # from the start of its Smart Tagging 'Kick Off (Start)' window when the half has one.
     opening_play_frames: int = 250
 
     # Rule 9: the taker stands over the ball in the last second before the restart.

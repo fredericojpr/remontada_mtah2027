@@ -99,3 +99,29 @@ In order of expected value per effort:
 
 - **Revert `aa57441`'s "10 s of play" logic to plain first kick?** It changes nothing on our match or the sample game, so simplicity argues for reverting. In either case, keep the new check lines in `pipeline.py`.
 - **Registered team name**, for the submission file names (`<team_name>.csv`, `<team_name>.md`).
+
+## 7. Step 2 implemented and run (29 Oct)
+
+- `dead_ball.kickoff_tag_starts()` reads each half's `Kick Off (Start)` window from Smart Tagging (case-insensitive; `Kick Off (After Goal)` ignored).
+- `dead_ball.stoppages(..., kickoff_tag=)`: a half opens on the first kick at or after that window's start, then the existing opening rule applies. If the half has no tag, or no kick after it, it falls back to today's rule and reports the branch.
+- The 1st half's window opens before its first graded frame, so it should be unchanged.
+- `pipeline.py` prints the written file, plus two comparisons: without Smart Tagging (= `aa57441`) and with Smart Tagging and a plain first kick (for the §6 revert decision).
+- Tests: five new rule 10 tests in `tests/test_rules.py` (synthetic scenes only).
+
+Run locally by the PM; aggregate output only:
+
+| | Possessions | Stoppages | 1st half | 2nd-half pre-kickoff dead | 2nd-half play vs published kickoff | Public 5 min |
+|---|---|---|---|---|---|---|
+| Without Smart Tagging (`aa57441`) | 374 | 106 | +0 s ✓ | 19% ✗ | −117 s ✗ | 0.412, 17/17 |
+| **With Smart Tagging (written file)** | **371** | **105** | **+0 s ✓** | **100% ✓** | **+3 s ✗ (tolerance ±2 s)** | 0.412, 17/17 |
+| With Smart Tagging, plain first kick | 371 | 105 | +0 s ✓ | 100% ✓ | +3 s ✗ | 0.412, 17/17 |
+
+- Both halves took the `kickoff tag` branch. The fallback was not used.
+- The spurious pre-kickoff play is gone (3 possessions and 1 stoppage fewer). Nothing else moved: the 1st half and the public 5 minutes are identical.
+- **The +3 s residual is not resolved and is not tuned away.** The aggregates cannot tell apart its two possible causes:
+  - the opening kick is detected about 3 s late, for example because the ball is unseen at the tap or the tap is too slow for the 1.5 m / 0.5 s kick definition;
+  - the half opens on time, but a short `D` follows within the first 10 s.
+
+  Either way the cost is timing on a single transition (about 0.01–0.03 spellF1 at our §7 per-error rates), well inside noise. Do not loosen `TOLERANCE_FRAMES` or adjust a kick parameter until this check passes; that would turn the published kickoff into a tuning target.
+- **The §6 revert decision now has its evidence.** The "10 s of play" logic again changes no aggregate, with or without the tag.
+- New file sha256: `e4a73f39f4365e83267e9518c49970a0d6177556591c8af20d726a47c9886488`. It is the recommended replacement for `0213b1b8…` as the 1 Nov insurance submission.
