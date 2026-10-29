@@ -144,13 +144,27 @@ def test_rule10_half_starts_dead_until_kickoff_and_only_halves_are_graded():
     assert text.index("H") in (151, 152)
 
 
-def test_rule10_kicks_away_from_the_centre_mark_do_not_start_the_half():
+def teams_scene(n, ball, home_x, away_x):
+    """Seven players per team standing at the given x positions (per frame), spread across y."""
+    y = np.linspace(10.0, 58.0, 7)
+    home = np.stack([np.column_stack([home_x, np.full(n, yy)]) for yy in y], axis=1)
+    away = np.stack([np.column_stack([away_x, np.full(n, yy)]) for yy in y], axis=1)
+    home[:, 3] = [52.0, 34.0]
+    slots = np.concatenate([home, away], axis=1)
+    team = np.tile(np.array([0] * 7 + [1] * 7, dtype=np.int8), (n, 1))
+    return epts.Tracking(np.arange(1, n + 1), ball, slots, np.full((n, 14), 3.0), team, PITCH)
+
+
+def test_rule10_only_a_kick_from_the_kickoff_formation_starts_the_half():
     n = 400
     ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
-    ball[100:120] = np.column_stack([np.linspace(20.0, 30.0, 20), np.full(20, 34.0)])
-    ball[200:] = np.column_stack([52.5 + 0.2 * np.arange(n - 200), np.full(n - 200, 34.0)])
-    tracking = scene(n, ball, [52.5, 34.5], [60.0, 34.0])
-    tracking.ball_xy = ball
-    text = string(possession.label_match(tracking, [(90, 349)], n))
+    ball[100:120] = np.column_stack([np.linspace(52.5, 62.5, 20), np.full(20, 34.0)])
+    ball[120:200] = [52.5, 34.0]
+    ball[200:] = np.column_stack([52.5 - 0.2 * np.arange(n - 200), np.full(n - 200, 34.0)])
+    home_x = np.where(np.arange(n) < 150, 60.0, 30.0)
+    tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
+    report = []
+    text = string(possession.label_match(tracking, [(90, 349)], n, report=report))
     assert set(text[90:201]) == {"D"}
     assert text.index("H") in (201, 202)
+    assert report == ["formation kick"]

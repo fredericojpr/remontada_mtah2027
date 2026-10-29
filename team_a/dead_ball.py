@@ -52,12 +52,50 @@ def run_starts(mask, min_frames):
     return [start for start, stop in runs(mask) if stop - start >= min_frames]
 
 
-def stoppages(ball, speed, median_speed, pitch, first, last, params):
+def kickoff_formation(tracking, params):
+    """Frames where each team stands in its own half, as at a kickoff (rule 10)."""
+    x = tracking.slot_xy[:, :, 0] - tracking.pitch[0] / 2.0
+    seen = ~np.isnan(x)
+    home, away = seen & (tracking.slot_team == 0), seen & (tracking.slot_team == 1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        home_side = np.sign(np.nanmedian(np.where(home, x, np.nan), axis=1))
+    with np.errstate(invalid="ignore"):
+        side = np.sign(x)
+    n_home, n_away = home.sum(axis=1), away.sum(axis=1)
+    own_home = (home & (side == home_side[:, None])).sum(axis=1)
+    own_away = (away & (side == -home_side[:, None])).sum(axis=1)
+    share = params.kickoff_own_half_share
+    return ((n_home >= params.kickoff_min_players) & (n_away >= params.kickoff_min_players)
+            & (own_home >= share * n_home) & (own_away >= share * n_away) & (home_side != 0))
+
+
+def held_recently(mask, frames):
+    total = np.concatenate(([0], np.cumsum(mask)))
+    index = np.arange(len(mask))
+    return (total[index + 1] - total[np.maximum(0, index - frames)]) > 0
+
+
+def opening_restart(kicks, formation_recent, formation, n):
+    """(restart, branch): the first kick made from a kickoff formation; with the ball unseen,
+    the moment the formation breaks; failing both, the first kick."""
+    from_formation = kicks[formation_recent[kicks]] if len(kicks) else kicks
+    if len(from_formation):
+        return int(from_formation[0]), "formation kick"
+    for start, stop in runs(formation):
+        if stop < n:
+            return stop, "formation broke"
+    if len(kicks):
+        return int(kicks[0]), "first kick"
+    return n, "no kickoff found"
+
+
+def stoppages(ball, speed, median_speed, pitch, first, last, params, formation=None,
+              report=None):
     """[(dead_from, restart_at)] inside one graded half, frames [first, last].
 
     Rule 6: ball out. Rule 7: collective halt. Rule 8: restart on a kick, or when players move
-    again with the ball unseen after a halt. Each half starts dead until its kickoff, the first
-    kick from the centre mark (rule 10).
+    again with the ball unseen after a halt. Each half starts dead until its kickoff (rule 10).
     """
     stop = last + 1
     window = slice(first, stop)
@@ -74,21 +112,25 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params):
         + [(f, "halt") for f in run_starts(slow & still_ball, params.halt_frames)])
     kicks = np.array(kick_frames(kicked, s, params), dtype=np.int64)
     resumes = np.array(run_starts(missing & moving, params.resume_frames), dtype=np.int64)
-    centre = np.array(pitch) / 2.0
-    at_spot = np.hypot(*(b[kicks] - centre).T) <= params.kickoff_spot_radius_m if len(kicks) \
-        else np.zeros(0, dtype=bool)
-    kickoffs = kicks[at_spot] if at_spot.any() else kicks
+    if formation is None:
+        formation = np.ones(len(ball), dtype=bool)
+    recent = held_recently(formation, params.taker_window_frames)
+    opening, branch = opening_restart(kicks, recent[window], formation[window], stop - first)
+    if report is not None:
+        report.append(branch)
 
     found, t = [], 0
     for begin, kind in [(0, "kickoff")] + starts:
         if begin < t:
             continue
-        pool = kickoffs if kind == "kickoff" else kicks
-        options = [pool[pool >= begin][:1]]
-        if kind == "halt":
-            options.append(resumes[resumes >= begin][:1])
-        options = np.concatenate(options)
-        restart = int(options.min()) if len(options) else stop - first
+        if kind == "kickoff":
+            restart = opening
+        else:
+            options = [kicks[kicks >= begin][:1]]
+            if kind == "halt":
+                options.append(resumes[resumes >= begin][:1])
+            options = np.concatenate(options)
+            restart = int(options.min()) if len(options) else stop - first
         found.append([begin, restart])
         t = restart
 

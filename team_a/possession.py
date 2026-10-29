@@ -37,7 +37,7 @@ def label_half(labels, first, last, stops, gain_events, nearest, params):
     labels[since:last + 1] = state
 
 
-def label_match(tracking, halves, n_frames, params=DEFAULT):
+def label_match(tracking, halves, n_frames, params=DEFAULT, report=None):
     """H/A/D per graded frame, X elsewhere. halves: [(first, last)] video frames, inclusive."""
     if not np.array_equal(tracking.frame_id, np.arange(1, len(tracking.frame_id) + 1)):
         raise ValueError("tracking must hold one record per video frame, frame_id 1..N")
@@ -47,6 +47,7 @@ def label_match(tracking, halves, n_frames, params=DEFAULT):
     controlled = evidence.control(tracking, ball, params)
     gain_events = evidence.gains(controlled, missing, params)
     median_speed = dead_ball.median_player_speed(tracking.slot_speed)
+    formation = dead_ball.kickoff_formation(tracking, params)
 
     home, away = evidence.nearest_distance_per_team(tracking, ball)
     nearest = np.where(np.isinf(np.minimum(home, away)), evidence.NONE,
@@ -54,7 +55,8 @@ def label_match(tracking, halves, n_frames, params=DEFAULT):
 
     labels = np.full(n_frames, X, dtype=np.int8)
     for first, last in halves:
-        stops = dead_ball.stoppages(ball, speed, median_speed, tracking.pitch, first, last, params)
+        stops = dead_ball.stoppages(ball, speed, median_speed, tracking.pitch, first, last, params,
+                                    formation, report)
         inside = [(f, t) for f, t in gain_events if first <= f <= last]
         label_half(labels, first, last, stops, inside, nearest, params)
     return labels

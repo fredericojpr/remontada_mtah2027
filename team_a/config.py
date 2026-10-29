@@ -42,8 +42,10 @@ class Params:
     min_play_frames: int = 50
     resume_frames: int = 25
 
-    # Rule 10: a half opens with a kick from the centre mark (tracking error plus placement).
-    kickoff_spot_radius_m: float = 2.0
+    # Rule 10: at a kickoff every player is in his own half (Law 8); allow one or two tracking
+    # errors per team, and require most of each team to be seen.
+    kickoff_own_half_share: float = 0.9
+    kickoff_min_players: int = 7
 
     # Rule 9: the taker stands over the ball in the last second before the restart.
     taker_window_frames: int = 25

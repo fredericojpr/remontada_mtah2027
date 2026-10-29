@@ -27,11 +27,12 @@ PUBLISHED_SECOND_HALF_KICKOFF = 113742
 KICKOFF_TOLERANCE_FRAMES = 50
 
 
-def build(params=None):
+def build(params=None, report=None):
     tracking = epts.load_match("tactical")
     halves = [(first, last) for _, first, last in games.half_video_blocks(games.GAME)]
     kwargs = {} if params is None else {"params": params}
-    return possession.label_match(tracking, halves, games.source_frames("tactical"), **kwargs)
+    return possession.label_match(tracking, halves, games.source_frames("tactical"),
+                                  report=report, **kwargs)
 
 
 def write(labels, path):
@@ -55,13 +56,15 @@ if __name__ == '__main__':
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
-    labels = build()
+    branches = []
+    labels = build(report=branches)
     reason, digest = write(labels, args.out)
     print("validator  {}".format("OK" if reason is None else "FAIL: " + reason))
 
     n_spells, mean_s, n_stops, kickoff = summary(labels)
     print("possessions {}  mean {:.1f} s  stoppages {}".format(n_spells, mean_s, n_stops))
     near = abs(kickoff - PUBLISHED_SECOND_HALF_KICKOFF) <= KICKOFF_TOLERANCE_FRAMES
+    print("half openings  1st: {}  2nd: {}".format(*branches))
     offset = (kickoff - PUBLISHED_SECOND_HALF_KICKOFF) / 25.0
     print("2nd-half kickoff detected within 2 s of the published frame: {}  ({:+.0f} s)".format(
         "PASS" if near else "FAIL", offset))
