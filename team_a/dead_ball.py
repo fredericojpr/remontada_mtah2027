@@ -94,6 +94,9 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None
     again with the ball unseen after a halt. Rule 10: each half starts dead until its kickoff;
     with a Smart Tagging kickoff window starting at frame kickoff_tag, kicks before it are not
     the kickoff.
+
+    report, if given, gets one entry per half: the opening branch, the opening kick, and every
+    kept stoppage with the rules that produced it ("kickoff+halt" when a halt was merged in).
     """
     stop = last + 1
     window = slice(first, stop)
@@ -116,9 +119,6 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None
         candidates, prefix = ((tagged, "kickoff tag, ") if len(tagged)
                               else (kicks, "no kick after kickoff tag, "))
     opening, branch = opening_restart(candidates, [f for f, _ in starts], stop - first, params)
-    branch = prefix + branch
-    if report is not None:
-        report.append(branch)
 
     found, t = [], 0
     for begin, kind in [(0, "kickoff")] + starts:
@@ -132,18 +132,22 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, report=None
                 options.append(resumes[resumes >= begin][:1])
             options = np.concatenate(options)
             restart = int(options.min()) if len(options) else stop - first
-        found.append([begin, restart])
+        found.append([begin, restart, kind])
         t = restart
 
     merged = []
-    for begin, restart in found:
+    for begin, restart, kind in found:
         if merged and begin - merged[-1][1] < params.min_play_frames:
             merged[-1][1] = restart
+            merged[-1][2] += "+" + kind
         else:
-            merged.append([begin, restart])
-    kept = [(b0, r0) for i, (b0, r0) in enumerate(merged)
+            merged.append([begin, restart, kind])
+    kept = [(first + b0, first + r0, k) for i, (b0, r0, k) in enumerate(merged)
             if i == 0 or r0 - b0 >= params.min_stoppage_frames]
-    return [(first + b0, first + r0) for b0, r0 in kept]
+    if report is not None:
+        report.append({"branch": prefix + branch, "opening_kick": first + opening,
+                       "stoppages": kept})
+    return [(b0, r0) for b0, r0, _ in kept]
 
 
 def restart_team(nearest, restart, params):

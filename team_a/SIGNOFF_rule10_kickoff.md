@@ -125,3 +125,21 @@ Run locally by the PM; aggregate output only:
   Either way the cost is timing on a single transition (about 0.01–0.03 spellF1 at our §7 per-error rates), well inside noise. Do not loosen `TOLERANCE_FRAMES` or adjust a kick parameter until this check passes; that would turn the published kickoff into a tuning target.
 - **The §6 revert decision now has its evidence.** The "10 s of play" logic again changes no aggregate, with or without the tag.
 - New file sha256: `e4a73f39f4365e83267e9518c49970a0d6177556591c8af20d726a47c9886488`. It is the recommended replacement for `0213b1b8…` as the 1 Nov insurance submission.
+
+## 8. Diagnosis of the +3 s residual (29 Oct)
+
+`pipeline.py` now prints a 2nd-half opening breakdown. The published kickoff is used only as the reference point of the measurement. Run locally by the PM, aggregate output only; the file sha256 is unchanged (`e4a73f39…`), so the diagnostic does not alter the labels.
+
+```
+opening kick +3.4 s   first live frame +3.4 s   from the published kickoff
+opening dead stretch made by: kickoff
+in the 10 s after the opening kick: 0.0 s dead, stoppages starting: none
+ball seen from the published kickoff to the opening kick: 100%
+```
+
+- **The opening kick itself is late.** The half does not open early, and no stoppage follows it.
+- **The ball was tracked on every frame from the real kickoff to our opening kick.** So the real kickoff tap was visible, but did not meet our kick definition (rule 8: the ball travels ≥ 1.5 m within 0.5 s, from inside the pitch). The first movement that did was 3.4 s later, probably the next pass.
+- **Likely cause, not yet confirmed:** a short tap. Since 2016 the Laws allow the kickoff in any direction, and it only has to clearly move, so a tap of under 1.5 m to a teammate is legal and common. A tracked ball that lags or freezes at the tap would look the same in these aggregates.
+- **Why it matters beyond this kickoff:** rule 8 uses the same kick definition to time **every** restart, about 105 on our match. Short free kicks, short corners and kickoffs after goals would be late in the same way. This is a possible systematic error, not a one-off.
+- **Not fixed here.** Changing the kick definition until this kickoff lines up would tune on the published kickoff.
+- **Next step:** measure restart latency (signed, by restart type) on the degraded public sample game, with the scorer's transition matching. That is another game, so this is allowed, and a hosted assistant may run it. Change the kick definition only if restarts there are systematically late, and only to a rule justified by the Laws, validated on the sample game. Then read the kickoff line here as a correctness check.

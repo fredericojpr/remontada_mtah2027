@@ -157,7 +157,7 @@ def test_rule10_taps_followed_by_standing_still_do_not_open_the_half():
     stops = dead_ball.stoppages(ball, evidence.ball_speed(ball), median, PITCH, 0, n - 1, P,
                                 report)
     assert stops[0][0] == 0 and stops[0][1] in (900, 901, 902)
-    assert report == ["first kick followed by play"]
+    assert [r["branch"] for r in report] == ["first kick followed by play"]
 
 
 def test_rule10_opening_is_the_first_kick_followed_by_play_and_zero_window_is_first_kick():
@@ -199,7 +199,8 @@ def test_rule10_kicks_before_the_kickoff_tag_do_not_open_the_half():
     report = []
     stops = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P, report, 590)
     assert stops[0][0] == 0 and stops[0][1] in (600, 601, 602)
-    assert report == ["kickoff tag, first kick followed by play"]
+    assert report[0]["branch"] == "kickoff tag, first kick followed by play"
+    assert report[0]["opening_kick"] in (600, 601, 602)
 
 
 def test_rule10_kickoff_tag_before_the_half_changes_nothing():
@@ -215,7 +216,7 @@ def test_rule10_without_a_kick_after_the_tag_falls_back_to_the_kicks():
     report = []
     untagged = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P)
     stops = dead_ball.stoppages(ball, speed, median, PITCH, 0, len(ball) - 1, P, report, 1490)
-    assert stops == untagged and report[0].startswith("no kick after kickoff tag, ")
+    assert stops == untagged and report[0]["branch"].startswith("no kick after kickoff tag, ")
 
 
 def test_rule10_label_match_keeps_the_pre_kickoff_stretch_dead_with_a_tag():
@@ -225,3 +226,18 @@ def test_rule10_label_match_keeps_the_pre_kickoff_stretch_dead_with_a_tag():
     text = string(possession.label_match(tracking, [(0, len(ball) - 1)], len(ball),
                                          kickoff_tags=[590]))
     assert set(text[:600]) == {"D"} and "D" not in text[603:850]
+
+
+def test_rule10_report_names_a_halt_merged_into_the_opening():
+    ball, median = pre_kickoff_play()
+    ball[600:620] = np.column_stack([np.linspace(52.5, 56.5, 20), np.full(20, 34.0)])
+    ball[620:800] = [56.5, 34.0]
+    ball[800:] = np.column_stack([56.5 + 0.2 * np.arange(len(ball) - 800),
+                                  np.full(len(ball) - 800, 34.0)])
+    median[620:800] = 0.5
+    zero = dataclasses.replace(P, opening_play_frames=0)
+    report = []
+    stops = dead_ball.stoppages(ball, evidence.ball_speed(ball), median, PITCH, 0, len(ball) - 1,
+                                zero, report, 590)
+    assert report[0]["opening_kick"] in (600, 601, 602)
+    assert report[0]["stoppages"][0][2] == "kickoff+halt" and stops[0][1] in (800, 801, 802)
