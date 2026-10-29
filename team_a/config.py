@@ -41,8 +41,6 @@ class Params:
     min_stoppage_frames: int = 50
     min_play_frames: int = 50
     resume_frames: int = 25
-    # A kick seen just after a ball gap was struck inside it: mid-gap, at most 2 s (as rule 5).
-    restart_backdate_max_frames: int = 50
 
     # Rule 10: a half has started when play runs on for 10 s after a kick, counting only kicks
     # from the start of its Smart Tagging 'Kick Off (Start)' window when the half has one.

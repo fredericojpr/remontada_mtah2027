@@ -182,5 +182,5 @@ Results from `python team_a/scripts/restart_latency.py` (public data only):
 - **On the fair proxy the gain is noise:** +0.003 spellF1, and only 0.3 s of a 2.3 s median lag recovered.
 - **The gaps that hide restarts are mostly long.** The IQR of the lag runs to +6.4 s, so the restart and the play after it are both unseen. Half a gap capped at 2 s cannot reach that.
 - **The risk is real.** Wherever the ball goes unseen while play is dead, the rule backdates restarts that were not hidden (21–43% early above).
-- **Recommendation: do not ship.** Keep `fill_dead_ball()` and the comparison script, which any future restart or stoppage calibration needs.
+- **Not shipped.** The rule was removed after commit `12670ba`, which keeps it so this table can be reproduced. The submission is unchanged (`e4a73f39…`). `fill_dead_ball()` and the restart latency script stay, because any future restart or stoppage calibration needs them.
 - **Next lever, measure before building:** a restart cue that does not need the ball, such as the collective acceleration of players at the restart. First check, on the fair proxy, that it separates restarts from open play.

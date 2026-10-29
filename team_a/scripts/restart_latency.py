@@ -12,14 +12,13 @@ restart. "Ball gap" means the ball, in the tracking being labelled, is missing s
 kick window after the restart. Run on the clean sample and on the degraded one
 (team_a/degrade.py).
 
-It compares rule 8 with and without gap-backdated restarts. The sample's ball is blank whenever
-play is dead, so the third proxy fills it in first (degrade.fill_dead_ball): only that one can
-show whether backdating helps, because on the other two nearly every restart follows a gap.
+The sample's ball is blank whenever play is dead, so the third proxy fills it in first
+(degrade.fill_dead_ball); it is the fair one for anything that depends on seeing the dead ball.
+Commit 12670ba ran this with gap-backdated restarts as well (SIGNOFF section 10).
 
     python team_a/scripts/restart_latency.py [--by-type]
 """
 
-import dataclasses
 import os
 import sys
 
@@ -121,14 +120,11 @@ if __name__ == '__main__':
     proxies = [("clean", tracking), ("degraded", degrade.degrade(tracking)),
                ("degraded, dead ball filled",
                 degrade.degrade(degrade.fill_dead_ball(tracking, gt)))]
-    variants = [("restarts as before", dataclasses.replace(DEFAULT, restart_backdate_max_frames=0)),
-                ("gap-backdated restarts", DEFAULT)]
     for name, data in proxies:
         gap = {f: np.isnan(data.ball_xy[f:f + 1 + DEFAULT.kick_window_frames, 0]).any()
                for f, _, _ in events}
         dead = gt == pm.D
         print("\n{} sample (ball seen on {:.0f}% of dead frames): our restart minus the true "
               "restart".format(name, 100 * np.mean(~np.isnan(data.ball_xy[dead, 0]))))
-        for label, params in variants:
-            report(label, gt, possession.label_match(data, halves, n, params=params), events,
-                   travel, gap, by_type)
+        report("rules as configured", gt, possession.label_match(data, halves, n), events,
+               travel, gap, by_type)
