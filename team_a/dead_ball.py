@@ -5,7 +5,7 @@ import warnings
 import numpy as np
 
 from team_a.config import FPS
-from team_a.evidence import NONE, runs
+from team_a.evidence import NONE, bridge, runs
 
 
 def median_player_speed(slot_speed):
@@ -70,21 +70,24 @@ def kickoff_formation(tracking, params):
             & (own_home >= share * n_home) & (own_away >= share * n_away) & (home_side != 0))
 
 
-def held_recently(mask, frames):
-    total = np.concatenate(([0], np.cumsum(mask)))
-    index = np.arange(len(mask))
-    return (total[index + 1] - total[np.maximum(0, index - frames)]) > 0
+def opening_restart(kicks, formation, first, n, params):
+    """(restart, branch) relative to the half's first frame.
 
-
-def opening_restart(kicks, formation_recent, formation, n):
-    """(restart, branch): the first kick made from a kickoff formation; with the ball unseen,
-    the moment the formation breaks; failing both, the first kick."""
-    from_formation = kicks[formation_recent[kicks]] if len(kicks) else kicks
-    if len(from_formation):
-        return int(from_formation[0]), "formation kick"
-    for start, stop in runs(formation):
-        if stop < n:
-            return stop, "formation broke"
+    The kickoff formation is the first one held for at least 2 s (1 s flickers bridged) that is
+    still standing at the half's start or forms after it. The kickoff is the last kick shortly
+    before it breaks up; with no such kick seen, the moment it breaks; failing both, the first
+    kick of the half.
+    """
+    held = bridge(formation, params.taker_window_frames)
+    for start, stop in runs(held):
+        if stop - start < params.kickoff_formation_min_frames or stop <= first:
+            continue
+        end = stop - first
+        near = kicks[(kicks >= end - params.kickoff_break_frames)
+                     & (kicks <= end + params.taker_window_frames)]
+        if len(near):
+            return int(near[-1]), "kick as formation broke"
+        return end, "formation broke"
     if len(kicks):
         return int(kicks[0]), "first kick"
     return n, "no kickoff found"
@@ -113,9 +116,8 @@ def stoppages(ball, speed, median_speed, pitch, first, last, params, formation=N
     kicks = np.array(kick_frames(kicked, s, params), dtype=np.int64)
     resumes = np.array(run_starts(missing & moving, params.resume_frames), dtype=np.int64)
     if formation is None:
-        formation = np.ones(len(ball), dtype=bool)
-    recent = held_recently(formation, params.taker_window_frames)
-    opening, branch = opening_restart(kicks, recent[window], formation[window], stop - first)
+        formation = np.zeros(len(ball), dtype=bool)
+    opening, branch = opening_restart(kicks, formation, first, stop - first, params)
     if report is not None:
         report.append(branch)
 

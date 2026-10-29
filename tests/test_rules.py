@@ -161,10 +161,40 @@ def test_rule10_only_a_kick_from_the_kickoff_formation_starts_the_half():
     ball[100:120] = np.column_stack([np.linspace(52.5, 62.5, 20), np.full(20, 34.0)])
     ball[120:200] = [52.5, 34.0]
     ball[200:] = np.column_stack([52.5 - 0.2 * np.arange(n - 200), np.full(n - 200, 34.0)])
-    home_x = np.where(np.arange(n) < 150, 60.0, 30.0)
+    t = np.arange(n)
+    home_x = np.where(t < 150, 60.0, np.where(t < 230, 30.0, 60.0))
     tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
     report = []
     text = string(possession.label_match(tracking, [(90, 349)], n, report=report))
     assert set(text[90:201]) == {"D"}
     assert text.index("H") in (201, 202)
-    assert report == ["formation kick"]
+    assert report == ["kick as formation broke"]
+
+
+def test_rule10_kickoff_on_the_first_graded_frame_with_formation_from_before_grading():
+    n = 600
+    t = np.arange(n)
+    ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
+    ball[300:] = np.column_stack([52.5 - 0.2 * np.arange(n - 300), np.full(n - 300, 34.0)])
+    home_x = np.where(t < 350, 30.0, 60.0)
+    tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
+    report = []
+    text = string(possession.label_match(tracking, [(300, 599)], n, report=report))
+    assert text.index("H") in (300, 301, 302)
+    assert report == ["kick as formation broke"]
+
+
+def test_rule10_early_tap_with_the_ball_unseen_at_the_real_kickoff():
+    n = 1600
+    t = np.arange(n)
+    ball = np.column_stack([np.full(n, 52.5), np.full(n, 34.0)])
+    ball[200:220] = np.column_stack([np.linspace(52.5, 50.0, 20), np.full(20, 34.0)])
+    ball[220:1100] = [52.5, 34.0]
+    ball[1100:1180] = np.nan
+    ball[1180:] = np.column_stack([40.0 - 0.2 * np.arange(n - 1180), np.full(n - 1180, 34.0)])
+    home_x = np.where(t < 100, 60.0, np.where(t < 1110, 30.0, 60.0))
+    tracking = teams_scene(n, ball, home_x, np.full(n, 75.0))
+    report = []
+    text = string(possession.label_match(tracking, [(50, 1599)], n, report=report))
+    assert report == ["formation broke"]
+    assert set(text[50:1110]) == {"D"}
