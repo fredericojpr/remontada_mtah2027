@@ -11,6 +11,11 @@
 
 
 > **⚠ Superseded in part (27 Oct 2026).** The organisers' rule update (upstream `f8f2629`) bans hand labels on the provided game for any purpose, including validation, and forbids tuning on the public 5 minutes. The **silver set** (§11.4) and every "calibrate on public + silver" step in this document are therefore **void**. Calibration now uses Metrica's public sample games (other games, allowed). See the execution plan.
+
+> **⚠ Superseded in part (5 Nov 2026).** The organisers' additional guidance takes precedence over everything earlier. It forbids **checking our output against the video**, and requires that anything trained, fitted, calibrated or tuned uses **external data only**, never the ground truth or the provided video. Therefore:
+> - **Video error analysis is void.** Watching the video, or overlaying tracking on it, at frames where our output is wrong (§3.4, §6.4, §11.4 step 5) is not allowed. Watching the video to understand what counts as possession remains allowed, as long as it is not used to check or correct our output (§16 item 10).
+> - **Re-calibrating on our match is void.** Anything fitted on external data stays as fitted. There is no in-convention recalibration on our match, the public window or the video (§10.2).
+> - **Allowed:** automatic checks that use only the provided data, inspecting the data and the video to understand possession, the automatic tracking and Smart Tagging as inputs, intermediate files, and any dataset whose licence we have checked.
 ---
 
 ## Contents
@@ -179,7 +184,7 @@ SportsCode XML. `<start>`/`<end>` are seconds from tactical frame 0, so **`video
 
 ### 3.4 Homography
 
-One 3×3 matrix per frame, mapping **normalised pitch (0–1) to pixels**: `starter/load_homography.project(H[f], x, y)`. Check `valid` first (the matrix is NaN when invalid). Lower `reprojection_error` is better; the tactical median during play is 0.24. Its main use for us is **error analysis**: overlay tracking on video at the frames where we are wrong.
+One 3×3 matrix per frame, mapping **normalised pitch (0–1) to pixels**: `starter/load_homography.project(H[f], x, y)`. Check `valid` first (the matrix is NaN when invalid). Lower `reprojection_error` is better; the tactical median during play is 0.24. ~~Its main use for us is **error analysis**: overlay tracking on video at the frames where we are wrong.~~ **[Void, 5 Nov: see the note at the top.]**
 
 ### 3.5 Frame alignment: the traps
 
@@ -286,7 +291,7 @@ Unweighted mean of per-class F1 over H, A and D on graded frames. A predicted `X
 
 ### 6.4 Diagnostics the scorer gives us for free
 
-`run_evaluation.py` writes `reports/<name>.json` and `reports/<name>_transitions.csv`. The latter lists every transition as **matched / missed / spurious with its video frame**, so we can seek the video to see what fooled us. Use `--out` to keep reports outside the repo, and `--bootstrap 1000` before believing any gap.
+`run_evaluation.py` writes `reports/<name>.json` and `reports/<name>_transitions.csv`. The latter lists every transition as **matched / missed / spurious with its video frame**, ~~so we can seek the video to see what fooled us~~ **[Void, 5 Nov: see the note at the top.]** We read these reports as aggregates only. Use `--out` to keep reports outside the repo, and `--bootstrap 1000` before believing any gap.
 
 ---
 
@@ -449,12 +454,12 @@ Why this fits our problem:
 
 - **The masks are the GT's semantics.** A turnover can only happen as *flight → opponent control*, so a defender standing next to a ball that an attacker controls cannot flip the label. A loose ball is a flight state that emits the last team's label, so "a loose ball stays with the last team" comes for free. Open-play turnovers are 12 of the 20 public transitions, so this path carries most of the score.
 - **Costs depend on context, not on a constant.** Each switch cost is a function of Layer B evidence (e.g. a logistic in reception strength). Staying is cheap by default, and switching becomes cheap only when a cue supports it. When the ball is missing, the cues vanish, so the state is carried automatically.
-- **Calibration splits in two.** The mapping from evidence to cost is fitted on degraded external data (§11). Only **one global cost scale** and the decision thresholds are tuned on the in-convention data (silver set plus public window).
+- **Calibration splits in two.** The mapping from evidence to cost is fitted on degraded external data (§11). ~~Only **one global cost scale** and the decision thresholds are tuned on the in-convention data (silver set plus public window).~~ **[Void, 27 Oct and 5 Nov: everything, including the cost scale and the thresholds, is tuned on external data.]**
 - **It fits the rules.** The model is tiny, runs on CPU, is deterministic, and every parameter can be explained, which serves R4 and R5.
 
 Cautions, from the same paper† and our data:
 
-- **Cross-provider transfer is poor.** A model trained on K League GPS data reached only 52.7% edge accuracy on Sportec, and 41.7% the other way round†. Anything fitted externally must be recalibrated on our convention.
+- **Cross-provider transfer is poor.** A model trained on K League GPS data reached only 52.7% edge accuracy on Sportec, and 41.7% the other way round†. ~~Anything fitted externally must be recalibrated on our convention.~~ **[Void, 5 Nov: see the note at the top.]**
 - **PathCRF assumes 22 identified players; we have 46 fragmented, unidentified slots.** No published possession model is built for unidentified, fragmented tracks (Research Lead, RQ5). Two things soften this. Team-level possession only needs each slot's **team** label, which we have. And ordering-free team descriptors have precedent: SoccerTrack v2 spots ball actions from per-team centroid, dispersion, convex hull, speed, defensive and attacking lines, and a 6×3 player-density grid†. So use **per-frame team-level features** (nearest-k per team to the ball, team centroids, spreads, lines, speeds, density grids), not per-player temporal models.
 - **PathCRF's 92.4% comes from a single test match**†, and its training labels were built from synchronised events plus touch points, **not** from the dataset's BallPossession code†. Read it as evidence for the structure, not as an accuracy we can expect.
 
@@ -572,7 +577,7 @@ Every external match also becomes a **ball-loss stress test**, which generalises
    - Use it **for model selection and calibration only**, then hard-code the chosen parameters in config. The final pipeline then needs no hand labels to reproduce, and we never publish GT-like label files (see Q2 in §15).
 3. **Stress test on realistic ball loss:** take ball-visibility masks from other 5-minute stretches of the match and apply them to the public window, simulating the 42% missing rate. A method that collapses under this will collapse on the full match.
 4. **Label-free plausibility checks on the full match** (monitor, don't optimise): possession count and duration distribution, the number of `D` stretches against the 59 Smart Tagging set pieces, agreement of our team label with Smart Tagging phase teams, and home share.
-5. **Visual review:** for every version, watch a sample of spurious and missed transitions (from `reports/*_transitions.csv`) with the homography overlay.
+5. ~~**Visual review:** for every version, watch a sample of spurious and missed transitions (from `reports/*_transitions.csv`) with the homography overlay.~~ **[Void, 5 Nov: see the note at the top.]**
 6. **Experiment log:** one row per experiment with commit, config hash, data tier, spellF1 [CI] per tier, poss/dur, **over- and under-segmentation counts and boundary offsets** (segment diagnostics, as in the segmentation literature), and notes. Decisions reference log rows.
 
 ### 11.5 Component sanity checks (necessary, not sufficient)
@@ -710,7 +715,7 @@ RQ1–RQ6 were answered in the Research Lead's memo v2 (22 Oct); the doc has bee
 7. ☐ `python starter/baseline.py --out /tmp/baseline_check`, then `diff` each file against `evaluation/results/baseline_*.csv`. **They must be identical.** This is our first reproducibility proof.
 8. ☐ Inspect `BAR-ATH_tactical_atd.xml`: list every data channel. **Is there a ball z/height, ball-state or ball-owner channel?** If so, it changes the strategy.
 9. ☐ First local exploration (results stay local; share only conclusions in team channels): ball NaN rate per half and per minute · gap-length distribution · slot lifetimes and duplicates · ball coordinates outside [0,1] · player speed distribution in live vs dead periods · team attack direction per half · 2nd-half kickoff team · **ball gap-length distribution and per-zone dropout rates**, which drive the degradation module (§11.3). These statistics stay local.
-10. ☐ Watch on video: the 0.8 s and 1.3 s possessions (frames 15,346 and 15,766), the 4 public stoppages (12,851; 15,889; 17,380; 18,027), and the 2nd-half kickoff at 113,742.
+10. ☐ Watch on video: the 0.8 s and 1.3 s possessions (frames 15,346 and 15,766), the 4 public stoppages (12,851; 15,889; 17,380; 18,027), and the 2nd-half kickoff at 113,742. **[5 Nov: only to understand what counts as possession, never to check or correct our output.]**
 11. ☐ Build the local feature cache (npz/parquet) **inside `MTAH_DATA_DIR`**, never in the repo.
 
 ---
@@ -826,3 +831,4 @@ Starter notebooks: `starter/01_smart_tagging.ipynb` → `02_tracking_atd.ipynb` 
 | v1.0 | 21 Oct 2026 | Initial discovery: repository, challenge, data, metric, public GT, baselines, plan |
 | v1.1 | 21 Oct 2026 | Merged the Research Lead's literature memo: boundary-first architecture, masked context-dependent decoder (§10.2), motion-based dead-ball design (§10.3), external data tiers and degrade-to-match protocol (§11), Q7 and RQ1–RQ6 (§15), risks 12–15, literature register (§18.4). **Corrected §7**: added the cost of a single error and re-ranked priorities by frequency (new script `per_error_cost.py`) |
 | v1.2 | 22 Oct 2026 | Merged memo v2 (answers to RQ1–RQ6): calibrated stoppage fusion replaces the two-cue rule (§10.3), with per-error macroF1 added to `per_error_cost.py`; IDSSE label audit with go/no-go (§11.2); smoothing and radius guidance for touch cues (§10.4); team-level features for fragmented tracks (§10.2); human-timing caveat for the silver set (§11.4); degradation precedents (§11.3); register rebuilt with source locations (§18.4); RQ7–RQ8 open |
+| v1.3 | 5 Nov 2026 | Organisers' additional guidance: video error analysis and recalibration on our match marked void (top note, §3.4, §6.4, §10.2, §11.4, §16); licences and attribution in `team_a/COMPLIANCE.md` |
