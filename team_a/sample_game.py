@@ -2,7 +2,8 @@
 events. Used only to calibrate and validate rules; never part of the submission.
 
 Source: https://github.com/metrica-sports/sample-data (Metrica Sports). Event frames are tracking
-frame ids.
+frame ids. No formal licence; its terms ask for responsible use and for the source to be
+acknowledged in anything public (see team_a/COMPLIANCE.md).
 
 Labels, by algorithm:
   - an on-ball event (pass, carry, recovery, shot, set piece) makes its team the possessor and
