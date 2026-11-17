@@ -1,5 +1,31 @@
 # More than a Hack 2027 — Phase 1: Ball Possession
 
+> ## Team A submission: how to regenerate it
+>
+> This repository is the organisers' starter repository with Team A's pipeline in
+> [`team_a/`](team_a/). The approach, the data used, the possession rules and their limitations
+> are in the technical document, [`team_a/TECHNICAL_DOCUMENT.md`](team_a/TECHNICAL_DOCUMENT.md).
+>
+> Needs Python 3.11 and the match data bundle, which is not in this repository.
+>
+> ```bash
+> python3.11 -m venv .venv && source .venv/bin/activate
+> pip install -r requirements-team_a.txt
+> export MTAH_DATA_DIR=/path/to/data                   # or unpack the bundle into ./data
+> python -m team_a.doctor                              # checks the data bundle (PASS/FAIL only)
+> python -m team_a.pipeline --out <team_name>.csv      # writes the submission, prints its sha256
+> python evaluation/validate_submission.py <team_name>.csv
+> ```
+>
+> The pipeline is deterministic and regenerates the submitted file byte for byte. `pytest tests`
+> runs the test suite. The external sample data (Metrica Sports, Sample Game 3) is used only by
+> the analysis scripts in `team_a/scripts/`, never by the pipeline, and downloads itself from
+> [metrica-sports/sample-data](https://github.com/metrica-sports/sample-data) on first use.
+>
+> Everything below this box is the organisers' original README.
+
+---
+
 **Organised by [Metrica Sports](https://metrica-sports.com), [FC Barcelona](https://www.fcbarcelona.com)
 and the [Mobile World Capital Barcelona](https://www.mwcbarcelona.com)**, at the Talent Arena in Barcelona.
 
